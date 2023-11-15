@@ -31,7 +31,7 @@ def run(agent_cls, args):
 
         print("=====================================")
         print("Final message: ", final_message)
-    env.save("final")
+    print("Final answer was submitted by the agent system. You can view results and process in logs/<task-name>/main_log.txt")
 
 if __name__ == "__main__":
     # configs
@@ -69,6 +69,6 @@ if __name__ == "__main__":
     parser.add_argument("--langchain-agent", type=str, default="zero-shot-react-description", help="langchain agent")
 
     args = parser.parse_args()
-    args.log_dir = os.path.join('/logs/' + args.log_dir)
+    args.log_dir = os.path.join('logs/' + args.log_dir)
     print("\nArgs: ", args, file=sys.stderr)
     run(getattr(sys.modules[__name__], args.agent_type), args) # run <AgentName (ex. ResearchAgent)>(args)

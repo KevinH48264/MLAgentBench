@@ -34,6 +34,8 @@ from MLAgentBench.low_level_actions import list_files, read_file, write_file, ap
 import openai
 from openai import OpenAI
 import time
+from dotenv import load_dotenv
+load_dotenv()
 
 system_prompt = '''You are a helpful research assistant.'''
 
@@ -67,7 +69,6 @@ class Agent:
         self.AVAILABLE_ACTIONS = env.available_actions
         self.history_steps = []
         openai.api_key = os.getenv("OPENAI_API_KEY")
-        print("---- HEREERE openai.api_key", openai.api_key)
 
     def run(self):
         pass
@@ -84,11 +85,11 @@ class Agent:
     #     else:
     #         os.makedirs(self.log_dir)
 
-    #     with open(os.path.join(self.log_dir, "main_log"), "w", 1) as f:
+    #     with open(os.path.join(self.log_dir, "main.log"), "w", 1) as f:
     #         f.write("Enabled Tools in Prompt:" + str(list(env.action_infos.keys())) + "\n") 
     #         f.write("================================Start=============================\n")
 
-    #     print("Agent is up! See progress in {}".format(os.path.join(self.log_dir, "main_log")))
+    #     print("Agent is up! See progress in {}".format(os.path.join(self.log_dir, "main.log")))
 
 
     # TODO: look at save and restore to check if they work. Restore likely doesn't work because action_infos was gotten rid of
@@ -127,7 +128,7 @@ class SimpleAssistantAgent(Agent):
         )       
 
         print("iniital prompt: ", self.initial_prompt)
-        with open(os.path.join(self.log_dir , "main_log"), "a", 1) as f:
+        with open(os.path.join(self.log_dir , "main_log.txt"), "a", 1) as f:
             f.write(self.initial_prompt + "\n")
 
         # TODO: not surew here to put this
@@ -136,9 +137,11 @@ class SimpleAssistantAgent(Agent):
         assistant = client.beta.assistants.create(
             name="Research Agent",
             instructions=self.system_prompt,
-            tools=TOOL_DESCRIPTIONS,
+            tools=self.TOOL_DESCRIPTIONS,
             model=self.args.llm_name
         )
+        self.tools = self.TOOL_DESCRIPTIONS
+        self.available_functions = self.AVAILABLE_ACTIONS
         thread = client.beta.threads.create()
         print("got here")
 
@@ -185,7 +188,7 @@ class SimpleAssistantAgent(Agent):
             ###############################################
             
             # Log the prompt
-            with open(os.path.join(self.log_dir , "main_log"), "a", 1) as f:
+            with open(os.path.join(self.log_dir, "main_log.txt"), "a", 1) as f:
                 f.write("\n\nPROMPT: " + str(prompt) + "\nPrompt length: " + str(len(prompt)) + "\n")
 
             # Invoke the Assistants API to answer
@@ -226,14 +229,10 @@ class SimpleAssistantAgent(Agent):
                         # Call the function directly if `tool_function` is a callable object
                         # and `arguments` is a dictionary of arguments to pass to the function.
                         try:
-                            # Check for if a final answer was invoked
-                            if tool_function.name == 'finalAnswer':
-                                return "Final Answer was used. Finished successfully"
-
                             arguments = json.loads(tool_function.arguments)
-                            arguments["log_file"] = log_file # Add log file because low and high level defined actions require the log file as an arg
+                            # arguments["log_file"] = log_file # Add log file because low and high level defined actions require the log file as an arg
                             print("Arguments in JSON", arguments)
-                            function_output = self.available_functions[tool_function.name](**arguments,  **env.static_kwargs_for_tools)
+                            function_output = self.available_functions[tool_function.name](**arguments)
                             print("function_output", function_output)
                         except Exception as e:
                             # Perhaps not all arguments were provided
@@ -271,7 +270,7 @@ class SimpleAssistantAgent(Agent):
             print("Completion: ", completion) # TODO: will this output JSON in the right format?
 
             # Log the completion
-            with open(os.path.join(self.log_dir , "main_log"), "a", 1) as f:
+            with open(os.path.join(self.log_dir , "main_log.txt"), "a", 1) as f:
                 f.write("\n\nCOMPLETION: " + str(completion) + "\nCompletion length: " + str(len(str(completion))) + "\n")
                 print("\n\nCOMPLETION: " + str(completion) + "\nCompletion length: " + str(len(str(completion))) + "\n")
 
@@ -281,7 +280,7 @@ class SimpleAssistantAgent(Agent):
 
             self.history_steps.append({"step_idx": curr_step, "action": completion, "observation": completion})
 
-            with open(os.path.join(self.log_dir , "main_log"), "a", 1) as f:
+            with open(os.path.join(self.log_dir , "main_log.txt"), "a", 1) as f:
                 f.write("\nObservation:```\n" + self.history_steps[-1]["observation"] + "\n```\n\n")
 
             # step_idx = len(env.trace.steps) - 1

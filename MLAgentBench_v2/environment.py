@@ -33,23 +33,23 @@ class Environment:
     def __init__(self, args):
         print("Initializing environment...")
         self._args = args
-        script_dir = '/MLAgentBench'
 
         # Set up workspace and research problem.
         with open('MLAgentBench_v2/research_problem.txt', 'r') as f:
             self._research_problem = f.read()
         self._benchmark_folder_name = args.task
         self._work_dir = prepare_task(
-            work_dir = os.path.join(script_dir, args.work_dir), 
+            work_dir = args.work_dir, 
             task_name = args.task, 
             task_type = args.task_type
         )
 
-        # Set up logging
+        # Set up logging, overwrite existing logs if they exist
         self._log_dir = args.log_dir
-        if not os.path.exists(self._log_dir):
-            os.makedirs(self._log_dir)
-        self.main_log_path = os.path.join(self._log_dir, "main.log")
+        if os.path.exists(self._log_dir):
+            shutil.rmtree(self._log_dir)
+        os.makedirs(self._log_dir)
+        self.main_log_path = os.path.join(self._log_dir, "main_log.txt")
         self.num_steps = 0
         self._start_time = time.time()
 
@@ -72,13 +72,14 @@ class Environment:
                 'executeScript': self.execute_script,
                 # 'pythonREPL': python_repl,
                 # 'requestHelp': request_help,
-                'finalAnswer': print,
+                'finalAnswer': self.final_answer,
                 # 'openaiAssistantCreateAssistant': pass,
                 # 'openaiAssistantCreateThread': pass,
                 # 'openaiAssistantCreateThreadMessage': pass,
                 # 'openaiAssistantCreateRun': pass,
                 # 'openaiAssistantListThreadMessageCompletion': pass,
             }
+        self.final_answer = False
 
     ############################## getters ########################################
 
@@ -226,11 +227,8 @@ class Environment:
 
     def is_final(self):
         """Check if the task has reached a final state, either by reaching the maximum steps or time, or because the agent has submitted a final answer. """
-        
-        curr_step = len(self.trace.steps)
-        # check if any step is final answer
-        any_final_answer = any([s.action.name == "Final Answer" for s in self.trace.steps])
-        return curr_step >= self.args.max_steps or any_final_answer or time.time() - self.start_time > self.args.max_time
+
+        return self.num_steps >= self.args.max_steps or self.final_answer or time.time() - self.start_time > self.args.max_time
 
     def execute(self, action):
         """Execute an action and return the observation."""
@@ -328,14 +326,14 @@ class Environment:
         def wrapper(*args, **kwargs):
             # Log the function call
             with open(self.main_log_path, "a", 1) as log_file:
-                log_file.write(f"\nStep: {self.num_steps}\nCalling function: {func.__name__} with args: {args}, kwargs: {kwargs}\n")
+                log_file.write(f"\nStep: {self.num_steps}\nCalling function {func.__name__}({args}, {kwargs})\n")
 
             # Perform the actual function
             result = func(*args, **kwargs)
 
             # Log the function output
             with open(self.main_log_path, "a", 1) as log_file:
-                log_file.write(f"Function {func.__name__} returned: {result}\n")
+                log_file.write(f"\nFunction {func.__name__} returned: \n{result}\n")
 
             # Copy work_dir if it exists
             if self.work_dir and os.path.exists(self.work_dir):
@@ -359,22 +357,29 @@ class Environment:
         @self.log_decorator
         def wrapped_list_files(**kwargs):
             return list_files(**kwargs)
-        return list_files(**kwargs)
+        return wrapped_list_files(**kwargs)
 
     def read_file(self, **kwargs):
         @self.log_decorator
         def wrapped_read_file(**kwargs):
             return read_file(**kwargs)
-        return read_file(**kwargs)
+        return wrapped_read_file(**kwargs)
 
     def write_file(self, **kwargs):
         @self.log_decorator
         def wrapped_write_file(**kwargs):
             return write_file(**kwargs)
-        return write_file(**kwargs)
+        return wrapped_write_file(**kwargs)
 
     def execute_script(self, **kwargs):
         @self.log_decorator
         def wrapped_execute_script(**kwargs):
             return execute_script(**kwargs)
-        return execute_script(**kwargs)
+        return wrapped_execute_script(**kwargs)
+
+    def final_answer(self, **kwargs):
+        @self.log_decorator
+        def wrapped_final_answer(**kwargs):
+            self.final_answer = True
+            return "You have successfully submitted your final answer. No more actions necessary."
+        return wrapped_final_answer(**kwargs)

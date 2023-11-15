@@ -72,7 +72,7 @@ def prepare_task(work_dir, task_name, task_type, python="python"):
 
 # ex. taskname = "home-data-for-ml-course"
 def prepare_kaggle(work_dir, taskname):
-    input(f"Consent to the competition at https://www.kaggle.com/competitions/{taskname}/data; Press any key")
+    input(f"Consent to the competition at https://www.kaggle.com/competitions/{taskname}/data. Once completed, press any key: ")
 
     subprocess.run(["kaggle", "competitions", "download", "-c", taskname], cwd=work_dir) 
     subprocess.run(["unzip", "-n", f"{taskname}.zip"], cwd=work_dir) 
