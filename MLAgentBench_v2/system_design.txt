@@ -1,0 +1,59 @@
+Goal: Creating an E2E system for testing as many agent frameworks and prompts as fast as possible.
+
+Inputs:
+1. Research Problem
+2. Environment
+
+Process:
+1. Agent system
+
+Output: 
+1. Research Problem output (submission.csv)
+
+Principles:
+1. Agent interface
+- init()
+- run()
+2. Environment class -- keep lightweight
+- Data files -- work dir
+- Action functions -- Code Interpreter, Read File, Write File, Search, Reflect, Final Answer
+- Log files -- log dir, supports logging of action functions
+3. Experimenting with different parameters via scripting
+
+project_root/
+│
+├── research_problem.txt    # Research problem
+├── agents/agent.py         # All agent classes defined here with a simple base class
+├── environment.py          # Minimal environment wrapper
+├── actions.py              # Minimal actions
+├── prepare_task.py         # Prepare workspace
+└── runner.py               # Script to run an experiment with dynamic agent loading
+workspace/                  # Folder where the original files will be kept and the agent branch will be
+│
+├── <task-name>/            # Original downloaded or custom uploaded starter files (including answer.csv)
+└── <task-name>-branch/     # Branch that is the workspace of the agent (excluding answer.csv for eval)
+logs/
+
+
+E2E Flow:
+0. Environment already has Actions pre-defined by owner.
+- List files (environment for actions, )
+- Read file
+- Write file (only in workspace)
+- Search
+- Think
+- Final answer
+- An OpenAI Assistant class will also be provided to take in a prompt and give an output after running through all the Actions it decides is necessary. 
+- Note: Logging is automatically invoked whenever an Action is invoked, saving state of work_dir in log_dir
+1. User wants to solve the house-price task from Kaggle. They enter a command for this.
+2. We prepare the house-price 1. Research Problem and 2. Workspace in work_dir. We automatically run prepare.py to prepare the environment.
+3. Then the user can choose an existing agent class or write a new agent class that takes in the environment and writes an agent to try succeeding in the environment given the research goal.
+4. The output of that agent class should be giving proof that it fulfilled the research goal and that I will check.
+
+Concerns:
+1. Does it handle Eureka, Voyager, and OPRO changes easily?
+Eureka -- need to be able to give environment.py and research_problem, which is good. Only problem is that environment.py might be too long. Therefore, we'll modularize it so that most of the utils are elsewhere. There can be a repetition step that keeps going for like 50 rounds and tries to improve itself too, and only returns the best answer at the end. This would work.
+
+Voyager -- I'll have to write the other agents, but most of the code should be doable and really just relies on a workspace accessible and keeping information in a file or variable. And then it'll return. 
+
+OPRO -- This is a meta prompter which can effectively give another agent instructions to build Eureka or Voyager. Running this with the right prompt and code should be doable. I can establish how many times to improve, and give the starter code to motivate OPRO to prompt and improve prompts. This will look like Eureka.
