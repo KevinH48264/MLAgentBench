@@ -208,7 +208,7 @@ def complete_text(prompt, log_file, model, json=False, **kwargs):
     return completion
 
 # specify fast models for summarization etc
-FAST_MODEL = "claude-v1"
+FAST_MODEL = "gpt-3.5-turbo-1106"
 def complete_text_fast(prompt, **kwargs):
     return complete_text(prompt = prompt, model = FAST_MODEL, temperature =0.01, **kwargs)
 # complete_text_fast = partial(complete_text_openai, temperature= 0.01)

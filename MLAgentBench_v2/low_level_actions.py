@@ -26,31 +26,31 @@ def append_to_low_level_steps(trace, name, args, observation):
     trace.low_level_steps.append(Step(action=Action(name, args),observation=observation,timestamp=time.time()))
 
 
-def record_low_level_step(func):
-    """ This decorator records a low level step in the trace."""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        new_kwargs = normalize_args_kwargs(func, *args, **kwargs)
-        if "trace" not in new_kwargs["kwargs"]:
-            print("Warning: trace not found in kwargs; not recording low level step.")
-            print(func)
-            return func(*args, **kwargs)
-        else:
-            trace = new_kwargs["kwargs"]["trace"]
-            for a in LOW_LEVEL_ACTIONS:
-                if a.function.__name__ == func.__name__:
-                    name = a.name
-                    input_args = a.usage.keys()
-                    break
-            new_kwargs = {k: v for k, v in new_kwargs.items() if k in input_args}
-            try:
-                observation = func(*args, **kwargs)
-                append_to_low_level_steps(trace, name, new_kwargs, observation)
-                return observation
-            except EnvironmentError as e:
-                append_to_low_level_steps(trace, name, new_kwargs, e)
-                raise EnvException(e)
-    return wrapper
+# def record_low_level_step(func):
+#     """ This decorator records a low level step in the trace."""
+#     @wraps(func)
+#     def wrapper(*args, **kwargs):
+#         new_kwargs = normalize_args_kwargs(func, *args, **kwargs)
+#         if "trace" not in new_kwargs["kwargs"]:
+#             print("Warning: trace not found in kwargs; not recording low level step.")
+#             print(func)
+#             return func(*args, **kwargs)
+#         else:
+#             trace = new_kwargs["kwargs"]["trace"]
+#             for a in LOW_LEVEL_ACTIONS:
+#                 if a.function.__name__ == func.__name__:
+#                     name = a.name
+#                     input_args = a.usage.keys()
+#                     break
+#             new_kwargs = {k: v for k, v in new_kwargs.items() if k in input_args}
+#             try:
+#                 observation = func(*args, **kwargs)
+#                 append_to_low_level_steps(trace, name, new_kwargs, observation)
+#                 return observation
+#             except EnvironmentError as e:
+#                 append_to_low_level_steps(trace, name, new_kwargs, e)
+#                 raise EnvException(e)
+#     return wrapper
 
 
 def check_file_read_only(arg_names, **kwargs):
@@ -73,8 +73,10 @@ def check_file_in_work_dir(arg_names, **kwargs):
     def inner(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
+            print("\nChecking if file is in working directory!")
             new_kwargs = normalize_args_kwargs(func, *args, **kwargs)
             work_dir = new_kwargs["work_dir"]
+            print("\nCurrent working directory: ", work_dir)
             for arg_name in arg_names:
                 file_name = new_kwargs[arg_name]
                 if not os.path.abspath(os.path.join(work_dir, file_name)).startswith(os.path.abspath(work_dir)):
@@ -85,10 +87,10 @@ def check_file_in_work_dir(arg_names, **kwargs):
 
 
 @check_file_in_work_dir(["dir_path"])
-@record_low_level_step
+# @record_low_level_step
 def list_files( dir_path, work_dir = ".", **kwargs):
     try:
-        observation = subprocess.check_output(["ls", "-F", os.path.join(work_dir,dir_path)]).decode("utf-8")
+        observation = subprocess.check_output(["ls", "-F", os.path.join(work_dir, dir_path)]).decode("utf-8")
         return observation
     except:
         raise EnvException(f"Cannot list file in the {dir_path} directory")
@@ -98,18 +100,19 @@ def list_files( dir_path, work_dir = ".", **kwargs):
 
 
 @check_file_in_work_dir(["file_name"])
-@record_low_level_step
-def read_file(file_name, work_dir = '.', **kwargs):
+# @record_low_level_step
+def read_file(file_name, work_dir = '.', max_char_read = 5000, **kwargs):
+    print("Reading file!", file_name, work_dir)
     try:
         observation = open(os.path.join(work_dir,file_name)).read()
-        return observation
+        return observation[:max_char_read]
     except:
         raise EnvException(f"cannot read file {file_name}")
 
 
 @check_file_in_work_dir(["file_name"])
 @check_file_read_only(["file_name"])
-@record_low_level_step
+# @record_low_level_step
 def write_file(file_name, content, work_dir = ".", **kwargs):
     try:
         with open(os.path.join(work_dir,file_name), "w") as f:
@@ -122,7 +125,7 @@ def write_file(file_name, content, work_dir = ".", **kwargs):
 
 @check_file_in_work_dir(["file_name"])
 @check_file_read_only(["file_name"])
-@record_low_level_step
+# @record_low_level_step
 def append_file(file_name, content, work_dir = ".", **kwargs):
     try:
         with open(os.path.join(work_dir,file_name), "a") as f:
@@ -135,7 +138,7 @@ def append_file(file_name, content, work_dir = ".", **kwargs):
 
 @check_file_in_work_dir(["source", "destination"])
 @check_file_read_only(["destination"])
-@record_low_level_step
+# @record_low_level_step
 def copy_file( source, destination, work_dir = ".", **kwargs):
     
     try:
@@ -147,7 +150,7 @@ def copy_file( source, destination, work_dir = ".", **kwargs):
 
 
 @check_file_in_work_dir(["script_name"])
-@record_low_level_step
+# @record_low_level_step
 def undo_edit_script( script_name, work_dir = ".", **kwargs):
     
     backup_files = glob.glob(os.path.join(work_dir,"backup", f"{script_name}_*"))
@@ -168,15 +171,18 @@ def undo_edit_script( script_name, work_dir = ".", **kwargs):
         )
 
 
-@check_file_in_work_dir(["script_name"])
-@record_low_level_step
+# @check_file_in_work_dir(["script_name"])
+# @record_low_level_step
 def execute_script(script_name, work_dir = ".", **kwargs):
+    print("\nEXECUTE SCRIPT WAS CALLED")
+    print("\nRunning execute script! From directory: ", os.getcwd())
     if not os.path.exists(os.path.join(work_dir,script_name)):
         raise EnvException(f"The file {script_name} does not exist.")
     try:
         script_path = script_name
-        device = kwargs["device"]
-        python = kwargs["python"]
+        device = kwargs.get("device", "0")  # Default device is "0"
+        python = kwargs.get("python", "python")  # Default Python command is "python"
+
         cmd = f"CUDA_VISIBLE_DEVICES={device} {python} -u {script_path}"
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, cwd=work_dir)
 
@@ -222,7 +228,7 @@ def execute_script(script_name, work_dir = ".", **kwargs):
         raise EnvException(f"Something went wrong in executing {script_name}: {e}. Please check if it is ready to be executed.")
 
 
-@record_low_level_step
+# @record_low_level_step
 def python_repl(command, work_dir = ".", **kwargs):
     """Run command and returns anything printed."""
     try:
@@ -246,6 +252,6 @@ def python_repl(command, work_dir = ".", **kwargs):
         raise EnvException(f"Something went wrong in executing {command}: {e}")
 
 
-@record_low_level_step
+# @record_low_level_step
 def request_help(request, work_dir = ".", **kwargs):
     return input(f"Research Assistant is requesting help: {request}\n")

@@ -4,12 +4,16 @@ This file contains the Environment class, which prepares the environment for the
 Requirements:
 1. This should have access to the workspace and be clear about what the research problem is.
 2. This should have access to the actions.py file.
+
+Add-ons:
+- maybe give a list of libraries that are already installed?
 """
 
 import json
 import os
 import sys
 import subprocess
+import selectors
 import shutil
 import copy
 import time
@@ -71,7 +75,7 @@ class Environment:
                 # 'undoEditScript': undo_edit_script,
                 'executeScript': self.execute_script,
                 # 'pythonREPL': python_repl,
-                # 'requestHelp': request_help,
+                # 'requestHelp': self.request_help,
                 'finalAnswer': self.final_answer,
                 # 'openaiAssistantCreateAssistant': pass,
                 # 'openaiAssistantCreateThread': pass,
@@ -171,30 +175,6 @@ class Environment:
         if os.path.exists(os.path.join(self.work_dir, "backup")):
             shutil.rmtree(os.path.join(self.work_dir, "backup"))
         os.mkdir(os.path.join(self.work_dir, "backup"))
-
-
-    # def _initialize_trace(self):
-    #     if self.args.resume:
-    #         print("Restoring trace from {}".format(self.args.resume))
-    #         prev_trace = from_dict(data_class=Trace, data=json.load(open(os.path.join(self.args.resume, "env_log","trace.json"), "r")))
-    #         print("Resetting trace to step {}".format(self.args.resume_step))
-    #         steps = prev_trace.steps[:self.args.resume_step+1]
-    #         t = steps[-1].timestamp
-    #         low_level_steps = [s for s in prev_trace.low_level_steps if s.timestamp < t]
-    #         trace = Trace(
-    #             steps=steps,
-    #             low_level_steps=low_level_steps,
-    #             action_infos=self.action_infos,
-    #             task_description=self.research_problem,
-    #         )
-    #     else:   
-    #         trace = Trace(
-    #         steps=[],
-    #         low_level_steps=[],
-    #         action_infos=self.action_infos,
-    #         task_description=self.research_problem,
-    #     )
-    #     return trace
     
     def __enter__(self):
         # set time out
@@ -227,68 +207,16 @@ class Environment:
 
     def is_final(self):
         """Check if the task has reached a final state, either by reaching the maximum steps or time, or because the agent has submitted a final answer. """
-
-        return self.num_steps >= self.args.max_steps or self.final_answer or time.time() - self.start_time > self.args.max_time
-
-    def execute(self, action):
-        """Execute an action and return the observation."""
-
-        curr_step = len(trace.steps)
-        action_name = action.name
-        action_input = action.args
-
-        if action_name == "Final Answer":
-            observation = "end"
-
-        elif self.is_final():
-            observation = "The environment has shut down because the maximum number of steps or time has been reached. Please submit your final answer."
-
-        elif action_name not in list(self.action_infos.keys()):
-            actions = ", ".join(self.action_infos.keys())
-            observation = f"Invalid action: {action_name}. Action did not execute. Please use one of the following actions:\n{actions}"
-
-        else:
-            # execute the action and get the observation
-            log_file = os.path.join(os.path.join(self.log_dir, "tool_logs") , f"step_{curr_step}_tool_log.log")
-            usage = ",\n            ".join([f"{k}: [{v}]" for k, v in self.action_infos[action_name].usage.items()])
-            usage = f"""{{
-            {usage}
-            }}"""
-            invalid_action_error = f"The action input for {action_name} needs to be a valid json with proper entries. You may have missed the comma between entries. Please use the correct format and try again:\n{usage}"
-
-            if isinstance(action_input, dict):
-                try:
-                    observation = self.action_infos[action_name].function(**action_input, log_file=log_file, **self.static_kwargs_for_tools)
-                except TooLongPromptError:
-                    observation="EnvError: too long input for the tool"
-                except LLMError as e:
-                    observation = "LLMError: " + e.message
-                except EnvException as e:
-                    observation = "EnvError: " + e.message
-                except TypeError as e:
-                    print("Step: ", curr_step, file=sys.stderr)
-                    print(e, file=sys.stderr)
-                    print(action_input, file=sys.stderr)
-                    observation = "EnvError: " + invalid_action_error
-                except TimeoutException as e:
-                    raise e
-                except Exception as e:
-                    # should not happen
-                    print("Step: ", curr_step, file=sys.stderr)
-                    print(e, file=sys.stderr)
-                    if "Connection aborted." in str(e):
-                        raise Exception("Connection aborted for crfm")
-                    observation = f"EnvError: Error executing {action_name}."
-            else:
-                observation = invalid_action_error
-
-
-        step_time = time.time()
-
-        trace.steps.append(Step(action, observation, step_time))
-
-        self.save(curr_step)
-        return observation
+        if self.num_steps >= self.args.max_steps or time.time() - self.start_time > self.args.max_time:
+            return True, None
+            
+        if self.final_answer:
+            final_answer_evaluation = input(f"\nFinal answer submitted: {self.final_answer} Did the agent submit a valid final answer? If yes, respond with 'yes'. If not, provide feedback. ")
+            if final_answer_evaluation == "yes":
+                return True, None
+            return False, final_answer_evaluation
+        
+        return False, None
 
     def save(self, curr_step):
         print("SAVING IN ENVIRONMENT.PY!")
@@ -324,12 +252,36 @@ class Environment:
     def log_decorator(self, func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            # Log the function call
-            with open(self.main_log_path, "a", 1) as log_file:
-                log_file.write(f"\nStep: {self.num_steps}\nCalling function {func.__name__}({args}, {kwargs})\n")
+            try:
+                print(f"\nStep: {self.num_steps}\nCalling function {func.__name__}({args}, {kwargs})\n")
 
-            # Perform the actual function
-            result = func(*args, **kwargs)
+                # Log the function call
+                with open(self.main_log_path, "a", 1) as log_file:
+                    log_file.write(f"\nStep: {self.num_steps}\nCalling function {func.__name__}({args}, {kwargs})\n")
+
+                # Perform the actual function
+                result = func(*args, **kwargs)
+
+                print("--- TOOL SUCCESS ---")
+            except TooLongPromptError:
+                result = "EnvError: too long input for the tool"
+                print("--- TOOL ERROR ---", e)
+            except LLMError as e:
+                result = "LLMError: " + e.message
+                print("--- TOOL ERROR ---", e)
+            except EnvException as e:
+                result = "EnvError: " + e.message
+                print("--- TOOL ERROR ---", e)
+            except TypeError as e:
+                invalid_action_error = f"The arguments needs to have proper entries. You may have missed some entries or used inappropriate ones. Please use the correct format and try again:\n{self.tool_descriptions}"
+                result = "EnvError: " + invalid_action_error
+                print("--- TOOL ERROR ---", e)
+            except TimeoutException as e:
+                raise e
+                print("--- TOOL ERROR ---", e)
+            except Exception as e:
+                result = f"EnvError: Error executing {action_name}."
+                print("--- TOOL ERROR ---", e)
 
             # Log the function output
             with open(self.main_log_path, "a", 1) as log_file:
@@ -350,36 +302,101 @@ class Environment:
     def reflection(self, **kwargs):
         @self.log_decorator
         def wrapped_reflection(**kwargs):
-            return reflection(**kwargs)
-        return wrapped_reflection(**kwargs)
+            return reflection(research_problem=self.research_problem, log_file=self.main_log_path, **kwargs)
+        return wrapped_reflection(work_dir=self.work_dir, **kwargs)
 
     def list_files(self, **kwargs):
         @self.log_decorator
         def wrapped_list_files(**kwargs):
             return list_files(**kwargs)
-        return wrapped_list_files(**kwargs)
+        return wrapped_list_files(work_dir = self.work_dir, **kwargs)
 
     def read_file(self, **kwargs):
         @self.log_decorator
-        def wrapped_read_file(**kwargs):
-            return read_file(**kwargs)
-        return wrapped_read_file(**kwargs)
+        def wrapped_read_file(file_name, work_dir = '.', max_char_read = 5000, **kwargs):
+            print("Reading file!", file_name, work_dir)
+            try:
+                observation = open(os.path.join(work_dir, file_name)).read()
+                return observation[:max_char_read]
+            except:
+                raise EnvException(f"cannot read file {file_name}")
+        return wrapped_read_file(work_dir=self.work_dir, max_char_read = 2000, **kwargs)
 
     def write_file(self, **kwargs):
         @self.log_decorator
         def wrapped_write_file(**kwargs):
             return write_file(**kwargs)
-        return wrapped_write_file(**kwargs)
+        return wrapped_write_file(work_dir=self.work_dir, **kwargs)
 
+    # TODO: add the "check_file_in_work_dir" function from before
     def execute_script(self, **kwargs):
         @self.log_decorator
-        def wrapped_execute_script(**kwargs):
-            return execute_script(**kwargs)
-        return wrapped_execute_script(**kwargs)
+        def wrapped_execute_script(script_name, work_dir = ".", **kwargs):
+            print("\nEXECUTE SCRIPT WAS CALLED")
+            print("\nRunning execute script! From directory: ", os.getcwd(), " work_dir: ", work_dir)
+            print("THIS IS THE SCRIPT WE'RE LOOKING FOR: ", os.path.join(work_dir, script_name))
+            if not os.path.exists(os.path.join(work_dir, script_name)):
+                raise EnvException(f"The file {script_name} does not exist.")
+            try:
+                script_path = script_name
+                device = kwargs.get("device", "0")  # Default device is "0"
+                python = kwargs.get("python", "python")  # Default Python command is "python"
+
+                cmd = f"CUDA_VISIBLE_DEVICES={device} {python} -u {script_path}"
+                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, cwd=work_dir) # this sets the path for execution!
+
+                stdout_lines = []
+                stderr_lines = []
+
+                selector = selectors.DefaultSelector()
+                selector.register(process.stdout, selectors.EVENT_READ)
+                selector.register(process.stderr, selectors.EVENT_READ)
+
+                while process.poll() is None and selector.get_map():
+                    events = selector.select(timeout=1)
+
+                    for key, _ in events:
+                        line = key.fileobj.readline()
+                        if key.fileobj == process.stdout:
+                            print("STDOUT:", line, end =" ")
+                            stdout_lines.append(line)
+                        else:
+                            print("STDERR:", line, end =" ")
+                            stderr_lines.append(line)
+
+                for line in process.stdout:
+                    line = line
+                    print("STDOUT:", line, end =" ")
+                    stdout_lines.append(line)
+                for line in process.stderr:
+                    line = line
+                    print("STDERR:", line, end =" ")
+                    stderr_lines.append(line)
+
+                return_code = process.returncode
+
+                if return_code != 0:
+                    observation = "".join(stderr_lines)
+                else:
+                    observation = "".join(stdout_lines)
+                if observation == "" and return_code == 0:
+                    # printed to stderr only
+                    observation = "".join(stderr_lines)
+
+                return "The script has been executed. Here is the output:\n" + observation + "\nSTDOUT:\n" + "".join(stdout_lines) + "\nSTDERR:\n" + "".join(stderr_lines)
+            except Exception as e:
+                raise EnvException(f"Something went wrong in executing {script_name}: {e}. Please check if it is ready to be executed.")
+        return wrapped_execute_script(work_dir=self.work_dir, **kwargs)
+
+    def request_help(self, **kwargs):
+        @self.log_decorator
+        def wrapped_request_help(**kwargs):
+            return request_help(**kwargs)
+        return wrapped_request_help(work_dir=self.work_dir, **kwargs)
 
     def final_answer(self, **kwargs):
         @self.log_decorator
         def wrapped_final_answer(**kwargs):
-            self.final_answer = True
+            self.final_answer = kwargs.get('final_answer', "No final answer was submitted as an argument.")
             return "You have successfully submitted your final answer. No more actions necessary."
-        return wrapped_final_answer(**kwargs)
+        return wrapped_final_answer(work_dir=self.work_dir, **kwargs)

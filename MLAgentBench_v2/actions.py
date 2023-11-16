@@ -9,7 +9,10 @@ This should be a lightweight class and only contain actions / functions for the 
 - Code Interpreter
 - Retrieval
 - An OpenAI Assistant class will also be provided to take in a prompt and give an output after running through all the Actions it decides is necessary. 
-- Note: Logging is automatically invoked whenever an Action is invoked, saving state of work_dir in log_dir'''
+- Note: Logging is automatically invoked whenever an Action is invoked, saving state of work_dir in log_dir
+
+IMPORTANT: ALL FUNCTIONS SHOULD USE WORK_DIR AS CWD, OTHERWISE, IT'LL MESS WITH CONSISTENCY AND FUNCTIONS THAT ARE CALLED BY THE AGENT AND LEAD TO PROBLEMS
+'''
 # Note: using the existing actions for now
 
 import openai
@@ -189,7 +192,7 @@ TOOL_DESCRIPTIONS = [
                 },
                 "content": {
                     "type": "string",
-                    "description": "The content to be written to the file"
+                    "description": "The content to be written to the file. Please note that the current working directory that these files will be executed from if necessary will be from the workspace directory. Therefore, if you are using a file path, please make it in relation to the workspace directory being your root directory. All starter files like train.csv should be referenced as train.csv because all starter files are in the workspace directory."
                 }
             },
             "required": ["file_name", "content"]
@@ -310,13 +313,13 @@ TOOL_DESCRIPTIONS = [
         "type": "function",
         "function": {
         "name": "finalAnswer",
-        "description": "Use this to provide the final answer to the current task.",
+        "description": "Use this to submit the final answer to the research problem.",
         "parameters": {
             "type": "object",
             "properties": {
                 "final_answer": {
                     "type": "string",
-                    "description": "A detailed description on the final answer"
+                    "description": "A detailed description of the final answer"
                 }
             },
             "required": ["final_answer"]

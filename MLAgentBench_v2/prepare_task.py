@@ -79,14 +79,14 @@ def prepare_kaggle(work_dir, taskname):
     subprocess.run(["rm", f"{taskname}.zip"], cwd=work_dir)
 
     # TODO: I believe this is just to split the data into train and test sets where we know the full test set and don't use the entire targets
-    trainset = pd.read_csv(f"{work_dir}/train.csv")
-    trainset = trainset.reset_index(drop=True)
-    trainset.iloc[:int(len(trainset)*0.8)].to_csv(f"{work_dir}/train.csv", index=False)
-    testset = trainset.iloc[int(len(trainset)*0.8):]
+    # trainset = pd.read_csv(f"{work_dir}/train.csv")
+    # trainset = trainset.reset_index(drop=True)
+    # trainset.iloc[:int(len(trainset)*0.8)].to_csv(f"{work_dir}/train.csv", index=False)
+    # testset = trainset.iloc[int(len(trainset)*0.8):]
 
 
-    testset.drop(list(trainset.keys())[1:-1], axis=1).to_csv(f"{work_dir}/answer.csv", index=False)
-    testset = testset.drop(['SalePrice'], axis=1).to_csv(f"{work_dir}/test.csv", index=False)
+    # testset.drop(list(trainset.keys())[1:-1], axis=1).to_csv(f"{work_dir}/answer.csv", index=False)
+    # testset = testset.drop(['SalePrice'], axis=1).to_csv(f"{work_dir}/test.csv", index=False)
 
 
 

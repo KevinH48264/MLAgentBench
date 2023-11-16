@@ -1,7 +1,7 @@
 Goal: Creating an E2E system for testing as many agent frameworks and prompts as fast as possible.
 
 Inputs:
-1. Research Problem
+1. Research Problem (remind the user to be very clear about what the desired output is)
 2. Environment
 
 Process:

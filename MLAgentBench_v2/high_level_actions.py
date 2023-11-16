@@ -10,13 +10,9 @@ from .LLM import complete_text_fast, complete_text
 
 
 def reflection(things_to_reflect_on, work_dir = ".", research_problem = "", **kwargs):
-    research_log_content = read_file("research_log.log", work_dir = work_dir,  **kwargs)
+    # research_log_content = read_file("research_log.log", work_dir = work_dir,  **kwargs) # No research log for now
 
     prompt = f"""We are trying to solve this research problem: {research_problem}
-    Your current research log:
-    ```
-    {research_log_content}
-    ```
     Reflect on this: {things_to_reflect_on} 
     Give an answer in natural language paragraphs as truthfully as possible. 
     """

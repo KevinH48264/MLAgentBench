@@ -37,7 +37,7 @@ import time
 from dotenv import load_dotenv
 load_dotenv()
 
-system_prompt = '''You are a helpful research assistant.'''
+system_prompt = '''You are a helpful and first-rate research assistant and you never give up until you have completed the task.'''
 
 initial_prompt = """You are a helpful research assistant. 
 
@@ -120,23 +120,13 @@ class SimpleAssistantAgent(Agent):
 
     def run(self, env):
         print("Starting to run Simple Assistant Agent")
-        self.system_prompt = system_prompt
-        self.initial_prompt = initial_prompt.format(
-            task_description=env.research_problem, 
-            tools_prompt=self.AVAILABLE_ACTIONS.keys(), 
-            files_prompt=os.listdir(self.work_dir)
-        )       
-
-        print("iniital prompt: ", self.initial_prompt)
-        with open(os.path.join(self.log_dir , "main_log.txt"), "a", 1) as f:
-            f.write(self.initial_prompt + "\n")
 
         # TODO: not surew here to put this
         self.client = OpenAI(api_key=openai.api_key)
         client = self.client
         assistant = client.beta.assistants.create(
             name="Research Agent",
-            instructions=self.system_prompt,
+            instructions=system_prompt,
             tools=self.TOOL_DESCRIPTIONS,
             model=self.args.llm_name
         )
@@ -162,7 +152,14 @@ class SimpleAssistantAgent(Agent):
         # print("\nCOMPLETE COOL\n")
         # return "Cool"
 
-        while not env.is_final() and len(self.history_steps) < self.args.agent_max_steps:
+        while len(self.history_steps) < self.args.agent_max_steps:
+            # Potentially break or get feedback if the agent submitted a final answer
+            is_final, final_answer_feedback = env.is_final()
+            if is_final:
+                break
+            if final_answer_feedback:
+                self.initial_prompt += "\n You originally submitted a final answer, but it was not acceptable. Here is feedback: " + final_answer_feedback + ".\n"
+
             # self.history_steps = [{"step_idx": len(env.trace.steps), "action": entries, "observation": observation})]
             curr_step = len(self.history_steps)
             log_file = os.path.join(self.log_dir , f"step_{curr_step}_log.log")
@@ -174,14 +171,26 @@ class SimpleAssistantAgent(Agent):
             #     construct prompt for LLM based on research log          #
             ###############################################################
 
+            self.system_prompt = system_prompt
+            self.initial_prompt = initial_prompt.format(
+                task_description=env.research_problem, 
+                tools_prompt=self.AVAILABLE_ACTIONS.keys(), 
+                files_prompt=os.listdir(self.work_dir)
+            )       
+
+            print("iniital prompt: ", self.initial_prompt)
+            with open(os.path.join(self.log_dir , "main_log.txt"), "a", 1) as f:
+                f.write(self.initial_prompt + "\n")
             prompt = self.initial_prompt
 
             # Add research log to prompt
-            if self.args.max_steps_in_context > 0 and len(self.history_steps) > 0:
-                prompt += "Here are the last {} steps you took:\n".format(self.args.max_steps_in_context)
-                for idx in range(self.args.max_steps_in_context):
-                    if idx < len(self.history_steps):
-                        prompt += str(self.history_steps[idx])
+            prompt += "Here are the most recent steps you have taken:\n"
+            with open(os.path.join(self.log_dir, "main_log.txt"), "r") as f:
+                log = f.read()
+            prompt += "\n" + log[-2500:]
+                # for idx in range(self.args.max_steps_in_context):
+                #     if idx < len(self.history_steps):
+                #         prompt += str(self.history_steps[idx])
 
             ###############################################
             #     call LLM until the response is valid    #
@@ -190,6 +199,8 @@ class SimpleAssistantAgent(Agent):
             # Log the prompt
             with open(os.path.join(self.log_dir, "main_log.txt"), "a", 1) as f:
                 f.write("\n\nPROMPT: " + str(prompt) + "\nPrompt length: " + str(len(prompt)) + "\n")
+
+            # TODO: Need to wait until the run is inactive
 
             # Invoke the Assistants API to answer
             message = client.beta.threads.messages.create(
@@ -225,7 +236,7 @@ class SimpleAssistantAgent(Agent):
                         tool_type = tool_call.type
 
                         print(f"Run required action: \ntool_id: {tool_id}, \ntool_function.arguments: {tool_function.arguments}, \ntool_function.name: {tool_function.name}, \ntool_type: {tool_type}")
-                        
+
                         # Call the function directly if `tool_function` is a callable object
                         # and `arguments` is a dictionary of arguments to pass to the function.
                         try:
@@ -252,7 +263,7 @@ class SimpleAssistantAgent(Agent):
                             "tool_call_id": tool_id,
                             "output": function_output
                         })
-                    print("tool_outputs", tool_outputs)
+                    print("tool_outputs", tool_outputs[:500]) # Just get an idea of the first few lines, can read full log if necessary
 
                     # Submit tool outputs as a new run
                     run = client.beta.threads.runs.submit_tool_outputs(
@@ -260,11 +271,23 @@ class SimpleAssistantAgent(Agent):
                         run_id=run.id,
                         tool_outputs=tool_outputs
                     )
+                elif run.status == "failed":
+                    print("Run failed: ", run)
+                    break
 
                 time.sleep(1)
                 num_tries -= 1
                 if num_tries == 0:
-                    return "\nRun timed out"
+                    print("Run timed out, cancelling...")
+                    run = client.beta.threads.runs.cancel(thread_id=thread.id, run_id=run.id)
+                    print("Run.status: ", run.status)
+                    while run.status != "cancelled":
+                        run = client.beta.threads.runs.retrieve(
+                            thread_id=thread.id,
+                            run_id=run.id
+                        )
+                    print("Run cancelled!")
+                    break
             messages = client.beta.threads.messages.list(thread_id=thread.id)
             completion = messages.data[0].content[0].text.value
             print("Completion: ", completion) # TODO: will this output JSON in the right format?
