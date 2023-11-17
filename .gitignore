@@ -2,7 +2,7 @@
 logs/
 workspace/
 .env
-*/__pycache__/
+**/__pycache__/
 
 # Misc
 openai_api_key.txt
