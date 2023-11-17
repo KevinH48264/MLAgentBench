@@ -16,9 +16,6 @@ from MLAgentBench_v2.environment import Environment
 
 # Ensure that you add your agent class that you want to use
 from MLAgentBench_v2.agents.agent import Agent, SimpleAssistantAgent
-from MLAgentBench_v2.agents.agent_research import ResearchAgent
-from MLAgentBench_v2.agents.agent_basic_assistants import BasicAssistantAgent
-from MLAgentBench_v2.agents.agent_langchain  import LangChainAgent
 from MLAgentBench_v2.agents.curriculum_assistant_agent import CurriculumAndAssistantAgent
 from MLAgentBench_v2.agents.info_library_assistant import InformationLibraryAgent
 
