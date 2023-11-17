@@ -39,13 +39,6 @@ class Agent:
     def run(self):
         pass
 
-# Goal: ultimately be able to write an agent that 
-# 1. Instantiates an OpenAI Assistant using the environment's client key
-# 2. Makes calls to available actions
-# 2.5 Extra: the Assistants API calls are in the available actions too
-
-# Questions: 
-# 1. I don't know how Eureka handled when the reward code was generated with different arguments and it still executed it properly and automatically so only the useful environment variables are used.
 class SimpleAssistantAgent(Agent):
     """ Agent that takes actions based on the LLM output with the simplest prompt using Assistants API."""
     def __init__(self, env):
