@@ -9,6 +9,8 @@ Requirements:
 import os
 import argparse
 import sys
+import shutil
+import inspect
 from MLAgentBench_v2 import LLM
 from MLAgentBench_v2.environment import Environment
 
@@ -17,6 +19,8 @@ from MLAgentBench_v2.agents.agent import Agent, SimpleAssistantAgent
 from MLAgentBench_v2.agents.agent_research import ResearchAgent
 from MLAgentBench_v2.agents.agent_basic_assistants import BasicAssistantAgent
 from MLAgentBench_v2.agents.agent_langchain  import LangChainAgent
+from MLAgentBench_v2.agents.curriculum_assistant_agent import CurriculumAndAssistantAgent
+from MLAgentBench_v2.agents.info_library_assistant import InformationLibraryAgent
 
 def run(agent_cls, args):
     print("Running the run function!", agent_cls, args)
@@ -26,12 +30,17 @@ def run(agent_cls, args):
         print("Research problem: ", env.research_problem)
         print("=====================================")  
 
-        agent = agent_cls(args, env) # initial a ResearchAgent with the args and env
-        final_message = agent.run(env)
+        # Save agent file to logs
+        shutil.copy(inspect.getfile(inspect.getmodule(agent_cls)), os.path.join(env.log_dir, f'agent_copy.py'))
+
+        # Initialize and run agent
+        agent = agent_cls(env)
+        final_message = agent.run()
 
         print("=====================================")
-        print("Final message: ", final_message)
-    print("Final answer was submitted by the agent system. You can view results and process in logs/<task-name>/main_log.txt")
+        print("\nFinal message: ", final_message)
+        shutil.copy(env.main_log_path, os.path.join(env.log_dir, f'final_main_log.txt'))
+    print("Final answer was submitted by the agent system. You can view results and process in logs/<task-name>/final_main_log.txt")
 
 if __name__ == "__main__":
     # configs

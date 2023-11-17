@@ -1,11 +1,11 @@
-Goal: Creating an E2E system for testing as many agent frameworks and prompts as fast as possible.
+Goal: Creating an E2E system for testing as many agent frameworks and prompts (Eureka, Voyager, OPRO) as fast as possible.
 
 Inputs:
-1. Research Problem (remind the user to be very clear about what the desired output is)
+1. Research Problem: Ex. "It is your job to predict the sales price for each house. For each Id in the test set, you must predict the value of the SalePrice variable."
 2. Environment
 
 Process:
-1. Agent system
+1. Agent system -- 
 
 Output: 
 1. Research Problem output (submission.csv)
@@ -20,19 +20,19 @@ Principles:
 - Log files -- log dir, supports logging of action functions
 3. Experimenting with different parameters via scripting
 
-project_root/
+MLAgentBench/
 │
 ├── research_problem.txt    # Research problem
-├── agents/agent.py         # All agent classes defined here with a simple base class
 ├── environment.py          # Minimal environment wrapper
-├── actions.py              # Minimal actions
+    └── actions.py              # Minimal actions
+├── agents/agent.py         # All agent classes defined here with a simple base class (MLAgentBench, Voyager, Curriculum Agent + Assistants API)
 ├── prepare_task.py         # Prepare workspace
 └── runner.py               # Script to run an experiment with dynamic agent loading
 workspace/                  # Folder where the original files will be kept and the agent branch will be
 │
 ├── <task-name>/            # Original downloaded or custom uploaded starter files (including answer.csv)
 └── <task-name>-branch/     # Branch that is the workspace of the agent (excluding answer.csv for eval)
-logs/
+logs/                       # Logs where main_log tracks all action calls and outputs and folders are created to save workspace at each action call
 
 
 E2E Flow:
@@ -43,7 +43,8 @@ E2E Flow:
 - Search
 - Think
 - Final answer
-- An OpenAI Assistant class will also be provided to take in a prompt and give an output after running through all the Actions it decides is necessary. 
+- An OpenAI Assistant class will also be provided to take in a prompt and give an output after running through all the Actions it decides is necessary.  (can be turned on or off)
+- You.com Agent
 - Note: Logging is automatically invoked whenever an Action is invoked, saving state of work_dir in log_dir
 1. User wants to solve the house-price task from Kaggle. They enter a command for this.
 2. We prepare the house-price 1. Research Problem and 2. Workspace in work_dir. We automatically run prepare.py to prepare the environment.

@@ -192,7 +192,7 @@ TOOL_DESCRIPTIONS = [
                 },
                 "content": {
                     "type": "string",
-                    "description": "The content to be written to the file. Please note that the current working directory that these files will be executed from if necessary will be from the workspace directory. Therefore, if you are using a file path, please make it in relation to the workspace directory being your root directory. All starter files like train.csv should be referenced as train.csv because all starter files are in the workspace directory."
+                    "description": "The content to be written to the file. Please note that the current working directory that these files will be executed from if necessary will be from the workspace directory. Therefore, if you are using a file path, please make it in relation to the workspace directory being your root directory. All starter files like train.csv should be referenced as train.csv because all starter files are in the workspace directory. This content should be in valid JSON format where newlines are escaped otherwise it won't be parsed correctly."
                 }
             },
             "required": ["file_name", "content"]
@@ -309,20 +309,37 @@ TOOL_DESCRIPTIONS = [
     #     }
     #     }
     # },
+    # {
+    #     "type": "function",
+    #     "function": {
+    #     "name": "finalAnswer",
+    #     "description": "Use this to submit the final answer to the research problem.",
+    #     "parameters": {
+    #         "type": "object",
+    #         "properties": {
+    #             "final_answer": {
+    #                 "type": "string",
+    #                 "description": "A detailed description of the final answer"
+    #             }
+    #         },
+    #         "required": ["final_answer"]
+    #     }
+    #     }
+    # },
     {
         "type": "function",
         "function": {
-        "name": "finalAnswer",
-        "description": "Use this to submit the final answer to the research problem.",
+        "name": "webSearch",
+        "description": "Use this to search the web for information.",
         "parameters": {
             "type": "object",
             "properties": {
-                "final_answer": {
+                "query": {
                     "type": "string",
-                    "description": "A detailed description of the final answer"
+                    "description": "The query to search on the internet"
                 }
             },
-            "required": ["final_answer"]
+            "required": ["query"]
         }
         }
     }

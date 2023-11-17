@@ -24,6 +24,11 @@ from multiprocessing import active_children
 import readline # to make sure input() works properly
 from dacite import from_dict
 import functools
+from openai import OpenAI
+import openai
+from dotenv import load_dotenv
+from .LLM import complete_text_fast
+load_dotenv()
 
 import MLAgentBench_v2.high_level_actions as high_level_actions
 from .schema import Step, Trace, EnvException, TooLongPromptError, LLMError, EnhancedJSONEncoder 
@@ -35,29 +40,23 @@ from MLAgentBench.low_level_actions import list_files, read_file, write_file, ap
 
 class Environment:
     def __init__(self, args):
+        # Note: This function should be given to the agent to figure out how to use the environment variables.
         print("Initializing environment...")
-        self._args = args
+        self._args = args # Might be able to be deleted, more for other potentially deletable environment functions to use like signal alarm
 
         # Set up workspace and research problem.
         with open('MLAgentBench_v2/research_problem.txt', 'r') as f:
-            self._research_problem = f.read()
+            self._research_problem = f.read() # self.R(s) = reward model of current state
         self._benchmark_folder_name = args.task
         self._work_dir = prepare_task(
             work_dir = args.work_dir, 
             task_name = args.task, 
             task_type = args.task_type
         )
+        self.files = os.listdir(self.work_dir)
+        self.states = None # TODO: What are the states? s_n = compressed_research_log = memory = important files / observations from t_0 to t_n
 
-        # Set up logging, overwrite existing logs if they exist
-        self._log_dir = args.log_dir
-        if os.path.exists(self._log_dir):
-            shutil.rmtree(self._log_dir)
-        os.makedirs(self._log_dir)
-        self.main_log_path = os.path.join(self._log_dir, "main_log.txt")
-        self.num_steps = 0
-        self._start_time = time.time()
-
-        # Set up actions and logging
+        # Set up actions
         self._tool_descriptions = TOOL_DESCRIPTIONS # Formatted for OpenAI function calling
         self._available_actions = {
                 # 'understandFile': understand_file,
@@ -76,7 +75,8 @@ class Environment:
                 'executeScript': self.execute_script,
                 # 'pythonREPL': python_repl,
                 # 'requestHelp': self.request_help,
-                'finalAnswer': self.final_answer,
+                # 'finalAnswer': self.final_answer,
+                'webSearch': self.web_search,
                 # 'openaiAssistantCreateAssistant': pass,
                 # 'openaiAssistantCreateThread': pass,
                 # 'openaiAssistantCreateThreadMessage': pass,
@@ -84,6 +84,26 @@ class Environment:
                 # 'openaiAssistantListThreadMessageCompletion': pass,
             }
         self.final_answer = False
+
+        # Assistants API specific instantiation
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+        self.client = OpenAI(api_key=openai.api_key)
+        self.model = args.llm_name
+
+        # Set up logging, overwrite existing logs if they exist
+        self._log_dir = args.log_dir
+        if os.path.exists(self._log_dir):
+            shutil.rmtree(self._log_dir)
+        os.makedirs(self._log_dir)
+        self.main_log_path = os.path.join(self.work_dir, "main_log.txt")
+        with open(self.main_log_path, 'w') as f:
+            pass
+        self.num_steps = 0
+        self._start_time = time.time()
+
+        # Other variables in a partially observable Markov Decision Process
+        # self.transition = None # Transition probabilities between states. Problem, how do you operate when you don't even know what s' is until you take action a from state s?
+        # self.reward = S x A = reward function. # LLM. The agent is the reward modeler based on the Eureka paper. 
 
     ############################## getters ########################################
 
@@ -111,71 +131,16 @@ class Environment:
     def available_actions(self):
         return self._available_actions
     
-    # @property
-    # def read_only_files(self):
-    #     return self._read_only_files
-
-    # @property
-    # def action_infos(self):
-    #     return self._action_infos
-    
     @property
     def args(self):
         return self._args
-
-    # @property
-    # def static_kwargs_for_tools(self):
-    #     return self._static_kwargs_for_tools
-    
-    # @property
-    # def trace(self):
-    #     return copy.deepcopy(self._trace)
 
     @property
     def start_time(self):
         return self._start_time
     
     ############################## internal functions ########################################
-    
-    def _setup_log_dir(self):
-        # set up log dir
-        if os.path.exists(self.args.log_dir):
-            print("log_dir {} already exists".format(self.log_dir))
-        else:
-            os.makedirs(self.log_dir)
 
-
-    def _initialize_interactive_env(self):
-        # set up read only files
-        can_modify_files = input("What existing files can Research Assistant modify (relative paths separated by comma)? default is nothing: ").split(",")
-        size = 0
-        self._read_only_files = []
-        for path, subdirs, files in os.walk(os.path.join(self.work_dir)):
-            relpath = os.path.relpath(path, self.work_dir)
-            # filter out the files that are read only
-            filenames = [os.path.join(relpath, filename) for filename in files]
-            for not_ignore in can_modify_files:
-                ignore_filenames = [n for n in filenames if not fnmatch.fnmatch(n, not_ignore)]
-                self.read_only_files.extend(ignore_filenames)
-            for f in files:
-                size += os.path.getsize(os.path.join(path, f))
-                
-        # try save this task to a benchmark folder
-        os.makedirs(os.path.join(self.log_dir, self.benchmark_folder_name), exist_ok=True)
-        if size / 1e6 < 10:
-            # save if the size is smaller than 10MB
-            shutil.copytree(self.work_dir, os.path.join(self.log_dir, self.benchmark_folder_name, "env"))
-        os.makedirs(os.path.join(self.log_dir, self.benchmark_folder_name, "scripts"), exist_ok=True)
-        with open(os.path.join(self.log_dir, self.benchmark_folder_name, "scripts", "research_problem.txt"), "w") as f:
-            f.write(self.research_problem)
-        with open(os.path.join(self.log_dir, self.benchmark_folder_name, "scripts", "read_only_files.txt"), "w") as f:
-            f.write("\n".join(self.read_only_files))
-
-        # init backup folder and remove all content if it exists
-        if os.path.exists(os.path.join(self.work_dir, "backup")):
-            shutil.rmtree(os.path.join(self.work_dir, "backup"))
-        os.mkdir(os.path.join(self.work_dir, "backup"))
-    
     def __enter__(self):
         # set time out
         def signal_handler(signum, frame):
@@ -218,46 +183,23 @@ class Environment:
         
         return False, None
 
-    def save(self, curr_step):
-        print("SAVING IN ENVIRONMENT.PY!")
-        """ Save the trace and snapshot of the workspace folder """     
-        with open(os.path.join(self.log_dir, f"trace.json"), "w") as f:
-            json.dump(self.trace, f, indent=4, cls=EnhancedJSONEncoder)
-
-        ##### save a snapshot of the current step
-        save_folder = os.path.join(self.log_dir, f"traces/step_{curr_step}_files")
-        if os.path.exists(save_folder):
-            shutil.rmtree(save_folder)
-        os.makedirs(save_folder)
-
-        # save files in the folder that are not read only
-        for path, subdirs, files in os.walk(os.path.join(self.work_dir)):
-
-            relpath = os.path.relpath(path, self.work_dir)
-            dest = os.path.join(save_folder, relpath)
-
-            for file_name in files:
-                file_path = os.path.join(relpath, file_name)
-                if file_path not in self.read_only_files:
-                    # check wether the file to copy is part of self.log_dir
-                    if  os.path.abspath(os.path.join(self.work_dir, file_path)).startswith(os.path.abspath(self.log_dir.split("/env_log")[0])):
-                        continue                    
-                    if not os.path.exists(dest):
-                        os.makedirs(dest)            
-                    shutil.copyfile(os.path.join(self.work_dir, file_path), os.path.join(save_folder, file_path))
-
     ############## for logging ##############
 
     # Logging decorator
     def log_decorator(self, func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+            # Update files
+            self.files = os.listdir(self.work_dir)
+
+            # Update research log
             try:
                 print(f"\nStep: {self.num_steps}\nCalling function {func.__name__}({args}, {kwargs})\n")
 
                 # Log the function call
+                filtered_kwargs = {k: v for k, v in kwargs.items() if k != 'work_dir'}
                 with open(self.main_log_path, "a", 1) as log_file:
-                    log_file.write(f"\nStep: {self.num_steps}\nCalling function {func.__name__}({args}, {kwargs})\n")
+                    log_file.write(f"\nStep: {self.num_steps}\nCalling function {func.__name__}({args}, {filtered_kwargs})\n")
 
                 # Perform the actual function
                 result = func(*args, **kwargs)
@@ -301,8 +243,21 @@ class Environment:
     # TODO: This can likely be fixed by actually putting all functions in here
     def reflection(self, **kwargs):
         @self.log_decorator
-        def wrapped_reflection(**kwargs):
-            return reflection(research_problem=self.research_problem, log_file=self.main_log_path, **kwargs)
+        def wrapped_reflection(things_to_reflect_on, work_dir = ".", **kwargs):
+            research_log_content = read_file("main_log.txt", work_dir = work_dir,  **kwargs)
+
+            prompt = f"""We are trying to solve this research problem: {self.research_problem}
+            Your current research log:
+            ```
+            {research_log_content}
+            ```
+            Reflect on this: {things_to_reflect_on} 
+            
+            Give an answer in natural language paragraphs as truthfully as possible. 
+            """
+
+            reflection = complete_text_fast(prompt, log_file=self.main_log_path)
+            return f"Reflection: {reflection}\n"
         return wrapped_reflection(work_dir=self.work_dir, **kwargs)
 
     def list_files(self, **kwargs):
@@ -314,7 +269,6 @@ class Environment:
     def read_file(self, **kwargs):
         @self.log_decorator
         def wrapped_read_file(file_name, work_dir = '.', max_char_read = 5000, **kwargs):
-            print("Reading file!", file_name, work_dir)
             try:
                 observation = open(os.path.join(work_dir, file_name)).read()
                 return observation[:max_char_read]
@@ -323,6 +277,7 @@ class Environment:
         return wrapped_read_file(work_dir=self.work_dir, max_char_read = 2000, **kwargs)
 
     def write_file(self, **kwargs):
+        print("WRITE FILE WAS CALLED", kwargs)
         @self.log_decorator
         def wrapped_write_file(**kwargs):
             return write_file(**kwargs)
@@ -400,3 +355,13 @@ class Environment:
             self.final_answer = kwargs.get('final_answer', "No final answer was submitted as an argument.")
             return "You have successfully submitted your final answer. No more actions necessary."
         return wrapped_final_answer(work_dir=self.work_dir, **kwargs)
+    
+    def web_search(self, **kwargs):
+        @self.log_decorator
+        def wrapped_web_search(query = '', work_dir = '.', **kwargs):
+            try:
+                web_search_res = input(f"Query: {query} | Result: ") # temporary quick way for web searching
+                return web_search_res
+            except:
+                raise EnvException(f"Web search failed.")
+        return wrapped_web_search(work_dir=self.work_dir, **kwargs)

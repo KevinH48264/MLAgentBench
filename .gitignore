@@ -1,0 +1,10 @@
+.kaggle/
+logs/
+workspace/
+.env
+
+# Misc
+openai_api_key.txt
+test.ipynb
+notes.txt
+MLAgentBench_v2/benchmarks/

@@ -140,7 +140,7 @@ def complete_text_crfm(prompt=None, stop_sequences = None, model="openai/gpt-4-0
 
 
 def complete_text_openai(prompt, stop_sequences=[], model="gpt-3.5-turbo-1106", max_tokens_to_sample=2000, temperature=0.2, log_file=None, json=False, **kwargs):
-    print("OpenAI model: ", model, "\nPrompt: ", prompt, "\nPrompt length: ", len(prompt))
+    print("\nOpenAI model: ", model, "\nPrompt: ", prompt, "\nPrompt length: ", len(prompt))
     """ Call the OpenAI API to complete a prompt."""
 
     if json and (model == "gpt-3.5-turbo-1106" or model == "gpt-4-1106-preview"):
@@ -189,13 +189,15 @@ def complete_text_openai(prompt, stop_sequences=[], model="gpt-3.5-turbo-1106", 
     else:
         response = openai.Completion.create(**{"prompt": prompt,**raw_request})
         completion = response["choices"][0]["text"]
-    if log_file is not None:
-        log_to_file(log_file, prompt, completion, model, max_tokens_to_sample)
+
+    with open(log_file, "a", 1) as log_file:
+        log_file.write(f"\nPrompt: {prompt}\n\nCompletion: {completion}\n")
     return completion
 
 def complete_text(prompt, log_file, model, json=False, **kwargs):
     """ Complete text using the specified model with appropriate API. """
-    
+    print("COMPLETE TEXT")
+
     if model.startswith("claude"):
         # use anthropic API
         completion = complete_text_claude(prompt, stop_sequences=[anthropic.HUMAN_PROMPT, "Observation:"], log_file=log_file, model=model, **kwargs)
@@ -210,6 +212,6 @@ def complete_text(prompt, log_file, model, json=False, **kwargs):
 # specify fast models for summarization etc
 FAST_MODEL = "gpt-3.5-turbo-1106"
 def complete_text_fast(prompt, **kwargs):
+    print("COMPLETE_TEXT_FAST")
     return complete_text(prompt = prompt, model = FAST_MODEL, temperature =0.01, **kwargs)
 # complete_text_fast = partial(complete_text_openai, temperature= 0.01)
-

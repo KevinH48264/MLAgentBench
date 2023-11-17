@@ -4,7 +4,7 @@ With 79 explanatory variables describing (almost) every aspect of residential ho
 
 Evaluation
 Goal
-It is your job to predict the sales price for each house. For each Id in the test set, you must predict the value of the SalePrice variable. 
+It is your job to predict the sales price for each house. For each Id in the test set, you must predict the value of the SalePrice variable. You want a train and validation MAE of lower than 15,000 and there should be a submission.csv containing predictions for test.csv ready to submit.
 
 Metric
 Submissions are evaluated on Root-Mean-Squared-Error (RMSE) between the logarithm of the predicted value and the logarithm of the observed sales price. (Taking logs means that errors in predicting expensive houses and cheap houses will affect the result equally.)
@@ -17,9 +17,3 @@ Id,SalePrice
 1462,187724.1233
 1463,175221
 etc.
-
-Here is your plan:
-1. Read train.csv and submissions.csv
-2. Write a basic train.py file for train.csv and calculate train and validation MAE using a 80/20 split.
-3. If that works, then rewrite train.py file for train.csv AND test.csv, and have the predicted values for test.csv go to submission.csv.
-4. Then finally, submit the answer.
