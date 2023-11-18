@@ -139,8 +139,8 @@ def complete_text_crfm(prompt=None, stop_sequences = None, model="openai/gpt-4-0
     return completion
 
 
-def complete_text_openai(prompt, stop_sequences=[], model="gpt-3.5-turbo-1106", max_tokens_to_sample=2000, temperature=0.2, log_file=None, json=False, **kwargs):
-    print("\nOpenAI model: ", model, "\nPrompt: ", prompt, "\nPrompt length: ", len(prompt))
+def complete_text_openai(prompt, system_prompt="You are a helpful assistant.", stop_sequences=[], model="gpt-3.5-turbo-1106", max_tokens_to_sample=2000, temperature=0.2, log_file=None, json=False, **kwargs):
+    # print("\nOpenAI model: ", model, "\nPrompt: ", prompt, "\nPrompt length: ", len(prompt))
     """ Call the OpenAI API to complete a prompt."""
 
     if json and (model == "gpt-3.5-turbo-1106" or model == "gpt-4-1106-preview"):
@@ -161,9 +161,9 @@ def complete_text_openai(prompt, stop_sequences=[], model="gpt-3.5-turbo-1106", 
             **kwargs
         }
     if model.startswith("gpt-3.5") or model.startswith("gpt-4"):
-        messages = [{"role": "user", "content": prompt}]
+        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}]
         response = openai_client.chat.completions.create(**{"messages": messages,**raw_request})
-        print("RESPONSE: ", response)
+        # print("RESPONSE: ", response)
         completion = response.choices[0].message.content
 
         # Ensure that the completion is JSON parsable. If it isn't, ask GPT to make it JSON parsable by doubling the max tokens.
@@ -182,16 +182,17 @@ def complete_text_openai(prompt, stop_sequences=[], model="gpt-3.5-turbo-1106", 
                     "stop": stop_sequences or None,  # API doesn't like empty list
                     **kwargs
                 }
-                messages = [{"role": "user", "content": convert_to_json_prompt}]
+                messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": convert_to_json_prompt}]
                 response = openai_client.chat.completions.create(**{"messages": messages,**raw_request})
                 completion = response.choices[0].message.content
-                print("NEW COMPLETION: ", completion)
+                # print("NEW COMPLETION: ", completion)
     else:
         response = openai.Completion.create(**{"prompt": prompt,**raw_request})
         completion = response["choices"][0]["text"]
 
-    with open(log_file, "a", 1) as log_file:
-        log_file.write(f"\nPrompt: {prompt}\n\nCompletion: {completion}\n")
+    # if log_file:
+    #     with open(log_file, "a", 1) as log_file:
+    #         log_file.write(f"\nPrompt: {prompt}\n\nCompletion: {completion}\n")
     return completion
 
 def complete_text(prompt, log_file, model, json=False, **kwargs):

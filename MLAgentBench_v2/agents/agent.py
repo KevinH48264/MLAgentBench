@@ -25,16 +25,25 @@ import json
 class Agent:
     """ Base class for agents to leverage useful environment variables """
     def __init__(self, env):
+        # Goal / Reward
         self.research_problem = env.research_problem
-        self.work_dir = env.work_dir
-        self.files = env.files
+
+        # States
+        self.answer_states = env.answer_states
+
+        # Actions
         self.tool_descriptions = env.tool_descriptions
         self.available_actions = env.available_actions
         self.client = env.client
         self.model = env.model
-        self.log_dir = env.log_dir
+
+        self.work_dir = env.work_dir
+        self.files = env.files
+
+        # Logging
+        # self.log_dir = env.log_dir
         self.main_log_path = env.main_log_path
-        self.num_steps = env.num_steps
+        # self.num_steps = env.num_steps
 
     def run(self):
         pass
@@ -46,24 +55,8 @@ class SimpleAssistantAgent(Agent):
 
     def run(self):
         print("Starting to run Simple Assistant Agent")
-        self.system_prompt = '''You are a helpful and first-rate research assistant and you never give up until you have completed the task. You always respond in proper JSON format so that json.loads will accept your response.'''
-        self.initial_prompt = f"""You are a helpful research assistant. You always respond in proper JSON format so that json.loads will accept your response.
+        self.system_prompt = '''You are a helpful and first-rate research assistant.'''
 
-        Research Problem: {self.research_problem}
-
-        You have access to the following pieces of information in your file directory:
-        {self.files}
-
-        You have access to the following tools:
-        {self.available_actions}
-
-        Always respond in this format exactly:
-        {{
-            "Thought": "What you are currently doing, what actions to perform and why",
-            "Action": "the action to take, should be one of the names of the tools",
-            "Action Input": "the input to the action as a valid JSON string",
-        }}
-        """
         # Instantiate an Assistant
         self.assistant = self.client.beta.assistants.create(
             name="Research Agent",
@@ -74,14 +67,20 @@ class SimpleAssistantAgent(Agent):
         self.thread = self.client.beta.threads.create()
 
         while True:
-            # Add research log to prompt
-            self.initial_prompt += "Here are the most recent steps you have taken:\n"
-            with open(self.main_log_path, "r") as f:
-                log = f.read()
-            self.initial_prompt += "\n" + log[-2500:]
-            print("Recent steps in log: ", log[-2500:])
+            self.initial_prompt = f"""You are a helpful research assistant. Given a research problem, files, tools, and at most 5 of your most recent action, result, and answer, your goal is to choose and take the next best action and tool that you think could lead to a better answer and get you closer to solving the research problem. 
+
+            Research Problem: {self.research_problem}
+            Current Files: {self.files}
+            Tools / functions: {self.available_actions.keys()}
+            Most recent files, action, result, and answer states (oldest to newest):
+            {self.answer_states}        
+            """
 
             # Invoke the Assistants API to answer
+            with open(self.main_log_path, "a", 1) as log_file:
+                log_file.write(f"\nCalling Assistants API with initial prompt: ")
+                log_file.write(json.dumps(self.initial_prompt, indent=4))
+                log_file.write("\n")
             self.client.beta.threads.messages.create(
                 thread_id=self.thread.id,
                 role="user",

@@ -27,7 +27,7 @@ import functools
 from openai import OpenAI
 import openai
 from dotenv import load_dotenv
-from .LLM import complete_text_fast
+from .LLM import complete_text_fast, complete_text_openai
 load_dotenv()
 
 import MLAgentBench_v2.high_level_actions as high_level_actions
@@ -54,7 +54,13 @@ class Environment:
             task_type = args.task_type
         )
         self.files = os.listdir(self.work_dir)
-        self.states = None # TODO: What are the states? s_n = compressed_research_log = memory = important files / observations from t_0 to t_n
+        self.max_states = 5
+        self.answer_states = [{
+            "files": self.files,
+            "action": "None",
+            "previous_result": "None",
+            "answer_state": "None",
+        }] # s_t = [(s_t-5, answer_state, files)..., (s_t-2, answer_state, files), (s_t-1, answer_state, files), (s_t, answer_state, files)]. # potentially, we can add a research_log of steps that were taken to achieve a state and help guide future steps to be taken, like a MCTS
 
         # Set up actions
         self._tool_descriptions = TOOL_DESCRIPTIONS # Formatted for OpenAI function calling
@@ -95,7 +101,7 @@ class Environment:
         if os.path.exists(self._log_dir):
             shutil.rmtree(self._log_dir)
         os.makedirs(self._log_dir)
-        self.main_log_path = os.path.join(self.work_dir, "main_log.txt")
+        self.main_log_path = os.path.join(self.log_dir, "main_log.txt")
         with open(self.main_log_path, 'w') as f:
             pass
         self.num_steps = 0
@@ -194,12 +200,12 @@ class Environment:
 
             # Update research log
             try:
-                print(f"\nStep: {self.num_steps}\nCalling function {func.__name__}({args}, {kwargs})\n")
+                print(f"\nStep: {self.num_steps}\nCalling function {func.__name__}(args = {args}, kwargs = {kwargs})\n")
 
                 # Log the function call
                 filtered_kwargs = {k: v for k, v in kwargs.items() if k != 'work_dir'}
-                with open(self.main_log_path, "a", 1) as log_file:
-                    log_file.write(f"\nStep: {self.num_steps}\nCalling function {func.__name__}({args}, {filtered_kwargs})\n")
+                # with open(self.main_log_path, "a", 1) as log_file:
+                #     log_file.write(f"\nStep: {self.num_steps}\nCalling function {func.__name__}({args}, {filtered_kwargs})\n")
 
                 # Perform the actual function
                 result = func(*args, **kwargs)
@@ -218,16 +224,17 @@ class Environment:
                 invalid_action_error = f"The arguments needs to have proper entries. You may have missed some entries or used inappropriate ones. Please use the correct format and try again:\n{self.tool_descriptions}"
                 result = "EnvError: " + invalid_action_error
                 print("--- TOOL ERROR ---", e)
-            except TimeoutException as e:
-                raise e
-                print("--- TOOL ERROR ---", e)
+            # except TimeoutException as e:
+            #     raise e
+            #     print("--- TOOL ERROR ---", e)
             except Exception as e:
-                result = f"EnvError: Error executing {action_name}."
+                result = f"EnvError: Error executing {func.__name__}."
                 print("--- TOOL ERROR ---", e)
+            print("Finished!")
 
             # Log the function output
-            with open(self.main_log_path, "a", 1) as log_file:
-                log_file.write(f"\nFunction {func.__name__} returned: \n{result}\n")
+            # with open(self.main_log_path, "a", 1) as log_file:
+            #     log_file.write(f"\nFunction {func.__name__} returned: \n{result}\n")
 
             # Copy work_dir if it exists
             if self.work_dir and os.path.exists(self.work_dir):
@@ -235,8 +242,53 @@ class Environment:
                 shutil.copytree(self.work_dir, dest_dir, dirs_exist_ok=True)
 
             self.num_steps += 1
+            
+            # Update states
+            self.update_states(action=f"Calling function {func.__name__}(args = {args}, kwargs = {kwargs})", result=result)
+            
+            # Log most recent state
+            with open(self.main_log_path, "a", 1) as log_file:
+                log_file.write(f"\nStep: {self.num_steps}\n{json.dumps(self.answer_states[-1], indent=4)}\n")
+
             return result
         return wrapper
+    
+    def update_states(self, action, result):
+        """Update the states of the agent based on action and result. 
+        TODO: Extra 1: Break up the state into 1) problem 2) current best answer 3) metric 4) problem to solve 5) next step / plan to solve the problem -- some kind of structure like that.
+
+        TODO: If you don't use Assistants API, then you can have one action at a time and then the update state should only use the current action, result, and state to be the new state instead of the entire history. 2) Then you should have a MCTS to plan what is the next move. Or the updated state should just say what is missing, and not say how to fix it.
+        """
+
+        # Update files
+        self.files = os.listdir(self.work_dir)
+
+        system_prompt = '''You are a helpful assistant. Given a research problem, your goal is to improve the answer.
+        
+        You will be given this information:
+        Research Problem: ...
+        Current Files: ...
+        Tools / functions: ...
+        Most recent files, action, result, and answer states (oldest to newest): ...
+
+        You should then respond to me with your best answer given the new action and result taken, problems that still exist if you haven't solved the research problem, and a plan to solve those problems.
+        '''
+
+        user_prompt = f'''Research Problem: {self.research_problem}
+        Current Files: {self.files}
+        Tools / functions: {self.available_actions.keys()}
+        Most recent files, action, result, and answer states (oldest to newest): {self.answer_states}  
+'''
+        new_answer_state = complete_text_openai(prompt=user_prompt, system_prompt=system_prompt, model=self.model, log_file=self.main_log_path)
+
+        self.answer_states.append({
+            "files": self.files,
+            "action": action,
+            "result": result,
+            "answer_state": new_answer_state,
+        })
+        while len(self.answer_states) > self.max_states:
+            self.answer_states.pop(0)
 
     ############## for actions ##############
     

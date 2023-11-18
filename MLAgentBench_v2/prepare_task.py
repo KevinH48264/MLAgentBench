@@ -62,6 +62,9 @@ def prepare_task(work_dir, task_name, task_type, python="python"):
         # Delete answer.csv for Kaggle if evaluating
         if os.path.isfile(os.path.join(new_dir, "answer.csv")):
             os.remove(os.path.join(new_dir, "answer.csv"))
+
+        # Copy research problem into workspace
+        shutil.copy('MLAgentBench_v2/research_problem.txt', os.path.join(work_dir, f'research_problem.txt'))
     except:
         print("Failed to prepare task", task_name, ", of type: ", task_type, ", at work directory: ", work_dir)
         print("If you used a custom task, please make sure that you have created a folder with the same name as the task in the workspace directory.")
