@@ -18,6 +18,7 @@ from MLAgentBench_v2.environment import Environment
 from MLAgentBench_v2.agents.agent import Agent, SimpleAssistantAgent
 from MLAgentBench_v2.agents.curriculum_assistant_agent import CurriculumAndAssistantAgent
 from MLAgentBench_v2.agents.info_library_assistant import InformationLibraryAgent
+from MLAgentBench_v2.agents.agent_single_old_function_calling import SingleOldFunctionCallingAgent
 
 def run(agent_cls, args):
     print("Running the run function!", agent_cls, args)

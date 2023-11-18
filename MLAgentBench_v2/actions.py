@@ -32,8 +32,8 @@ import functools
 # thread = client.beta.threads.create()
 
 TOOL_DESCRIPTIONS = [
-    {"type": "code_interpreter"},
-    {"type": "retrieval"},
+    # {"type": "code_interpreter"},
+    # {"type": "retrieval"},
     # {
     #     "type": "function",
     #     "function": {

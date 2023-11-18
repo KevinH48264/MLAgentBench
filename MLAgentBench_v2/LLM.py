@@ -14,6 +14,7 @@ from functools import partial
 import tiktoken
 import json
 from .schema import TooLongPromptError, LLMError
+import json
 
 enc = tiktoken.get_encoding("cl100k_base")
 
@@ -138,18 +139,28 @@ def complete_text_crfm(prompt=None, stop_sequences = None, model="openai/gpt-4-0
         log_to_file(log_file, prompt, completion, model, max_tokens_to_sample)
     return completion
 
-
-def complete_text_openai(prompt, system_prompt="You are a helpful assistant.", stop_sequences=[], model="gpt-3.5-turbo-1106", max_tokens_to_sample=2000, temperature=0.2, log_file=None, json=False, **kwargs):
+# TODO: clean this function code up!
+def complete_text_openai(prompt, system_prompt="You are a helpful assistant.", stop_sequences=[], model="gpt-3.5-turbo-1106", max_tokens_to_sample=2000, temperature=0.2, log_file=None, json_required=False, tools=None, available_functions=None, **kwargs):
     # print("\nOpenAI model: ", model, "\nPrompt: ", prompt, "\nPrompt length: ", len(prompt))
     """ Call the OpenAI API to complete a prompt."""
 
-    if json and (model == "gpt-3.5-turbo-1106" or model == "gpt-4-1106-preview"):
+    if json_required and (model == "gpt-3.5-turbo-1106" or model == "gpt-4-1106-preview"):
         raw_request = {
             "model": model,
             "response_format": { "type": "json_object" },
             "temperature": temperature,
             "max_tokens": max_tokens_to_sample,
             "stop": stop_sequences or None,  # API doesn't like empty list
+            **kwargs
+        }
+    elif tools:
+        raw_request = {
+            "model": model,
+            "tools": tools,
+            "tool_choice": "auto",
+            "max_tokens": max_tokens_to_sample,
+            "stop": stop_sequences or None,  # API doesn't like empty list
+            "temperature": temperature,
             **kwargs
         }
     else:
@@ -165,9 +176,10 @@ def complete_text_openai(prompt, system_prompt="You are a helpful assistant.", s
         response = openai_client.chat.completions.create(**{"messages": messages,**raw_request})
         # print("RESPONSE: ", response)
         completion = response.choices[0].message.content
+        tool_calls = response.choices[0].message.tool_calls
 
         # Ensure that the completion is JSON parsable. If it isn't, ask GPT to make it JSON parsable by doubling the max tokens.
-        if json and (model == "gpt-3.5-turbo-1106" or model == "gpt-4-1106-preview"):
+        if json_required and (model == "gpt-3.5-turbo-1106" or model == "gpt-4-1106-preview"):
             try:
                 completion_json = json.loads(completion)
                 print("In complete_text_openai(), Completion JSON: ", completion_json)
@@ -186,6 +198,28 @@ def complete_text_openai(prompt, system_prompt="You are a helpful assistant.", s
                 response = openai_client.chat.completions.create(**{"messages": messages,**raw_request})
                 completion = response.choices[0].message.content
                 # print("NEW COMPLETION: ", completion)
+
+        if tool_calls:
+            messages.append(response.choices[0].message)
+            for tool_call in tool_calls:
+                function_name = tool_call.function.name
+                function_to_call = available_functions[function_name]
+                function_args = json.loads(tool_call.function.arguments)
+                function_response = function_to_call(**function_args)
+                messages.append(
+                    {
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": function_name,
+                        "content": function_response,
+                    }
+                )  # extend conversation with function response
+                print(f"Function calling required action: \nfunction_name: {function_name}, \ntool_function.arguments: {function_args}")
+            # second_response = openai_client.chat.completions.create(
+            #     model=model,
+            #     messages=messages,
+            # )  # get a new response from the model where it can see the function response
+            return "Function calling complete!"
     else:
         response = openai.Completion.create(**{"prompt": prompt,**raw_request})
         completion = response["choices"][0]["text"]

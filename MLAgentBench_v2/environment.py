@@ -197,6 +197,7 @@ class Environment:
         def wrapper(*args, **kwargs):
             # Update files
             self.files = os.listdir(self.work_dir)
+            kwargs['work_dir'] = self.work_dir # Update to actual work_dir
 
             # Update research log
             try:
@@ -244,6 +245,7 @@ class Environment:
             self.num_steps += 1
             
             # Update states
+            kwargs['work_dir'] = "." # replace work_dir for the agent to stay in its workspace
             self.update_states(action=f"Calling function {func.__name__}(args = {args}, kwargs = {kwargs})", result=result)
             
             # Log most recent state
@@ -310,13 +312,13 @@ class Environment:
 
             reflection = complete_text_fast(prompt, log_file=self.main_log_path)
             return f"Reflection: {reflection}\n"
-        return wrapped_reflection(work_dir=self.work_dir, **kwargs)
+        return wrapped_reflection(**kwargs)
 
     def list_files(self, **kwargs):
         @self.log_decorator
         def wrapped_list_files(**kwargs):
             return list_files(**kwargs)
-        return wrapped_list_files(work_dir = self.work_dir, **kwargs)
+        return wrapped_list_files(**kwargs)
 
     def read_file(self, **kwargs):
         @self.log_decorator
@@ -326,14 +328,14 @@ class Environment:
                 return observation[:max_char_read]
             except:
                 raise EnvException(f"cannot read file {file_name}")
-        return wrapped_read_file(work_dir=self.work_dir, max_char_read = 2000, **kwargs)
+        return wrapped_read_file(max_char_read = 2000, **kwargs)
 
     def write_file(self, **kwargs):
         print("WRITE FILE WAS CALLED", kwargs)
         @self.log_decorator
         def wrapped_write_file(**kwargs):
             return write_file(**kwargs)
-        return wrapped_write_file(work_dir=self.work_dir, **kwargs)
+        return wrapped_write_file(**kwargs)
 
     # TODO: add the "check_file_in_work_dir" function from before
     def execute_script(self, **kwargs):
@@ -393,27 +395,27 @@ class Environment:
                 return "The script has been executed. Here is the output:\n" + observation + "\nSTDOUT:\n" + "".join(stdout_lines) + "\nSTDERR:\n" + "".join(stderr_lines)
             except Exception as e:
                 raise EnvException(f"Something went wrong in executing {script_name}: {e}. Please check if it is ready to be executed.")
-        return wrapped_execute_script(work_dir=self.work_dir, **kwargs)
+        return wrapped_execute_script(**kwargs)
 
     def request_help(self, **kwargs):
         @self.log_decorator
         def wrapped_request_help(**kwargs):
             return request_help(**kwargs)
-        return wrapped_request_help(work_dir=self.work_dir, **kwargs)
+        return wrapped_request_help(**kwargs)
 
     def final_answer(self, **kwargs):
         @self.log_decorator
         def wrapped_final_answer(**kwargs):
             self.final_answer = kwargs.get('final_answer', "No final answer was submitted as an argument.")
             return "You have successfully submitted your final answer. No more actions necessary."
-        return wrapped_final_answer(work_dir=self.work_dir, **kwargs)
+        return wrapped_final_answer(**kwargs)
     
     def web_search(self, **kwargs):
         @self.log_decorator
-        def wrapped_web_search(query = '', work_dir = '.', **kwargs):
+        def wrapped_web_search(query = '', **kwargs):
             try:
                 web_search_res = input(f"Query: {query} | Result: ") # temporary quick way for web searching
                 return web_search_res
             except:
                 raise EnvException(f"Web search failed.")
-        return wrapped_web_search(work_dir=self.work_dir, **kwargs)
+        return wrapped_web_search(**kwargs)

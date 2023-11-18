@@ -12,10 +12,14 @@ Output:
 
 Principles:
 1. Agent interface
-- init()
-- run()
+- state (S) = #_relevant_steps * ({files, action, result, answer_state})
+- action space (A)
+- reward model (R) = research_problem
+- policy (pi) = LLM
+- transition model (P(s'|s,a)) = executing in the reality
+
 2. Environment class -- keep lightweight
-- Data files -- work dir
+- Files -- work dir
 - Action functions -- Code Interpreter, Read File, Write File, Search, Reflect, Final Answer
 - Log files -- log dir, supports logging of action functions
 3. Experimenting with different parameters via scripting
