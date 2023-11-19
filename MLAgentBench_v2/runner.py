@@ -15,7 +15,7 @@ from MLAgentBench_v2 import LLM
 from MLAgentBench_v2.environment import Environment
 
 # Ensure that you add your agent class that you want to use
-from MLAgentBench_v2.agents.agent import Agent, SimpleAssistantAgent
+from MLAgentBench_v2.agents.agent import Agent, SimpleAssistantAgent, SimpleFunctionCallingAgent
 from MLAgentBench_v2.agents.curriculum_assistant_agent import CurriculumAndAssistantAgent
 from MLAgentBench_v2.agents.info_library_assistant import InformationLibraryAgent
 from MLAgentBench_v2.agents.agent_single_old_function_calling import SingleOldFunctionCallingAgent
