@@ -7,6 +7,4 @@
 7. If your env file is not being read, “pip install python-dotenv”
 8. To run an agent from MLAgentBench_v2 scaffolding and agents folder:
 Make sure you created a class and imported it into runner.py
-Run "python -u -m MLAgentBench_v2.runner --python $(which python) --task home-data-for-ml-course --device 0 --log-dir house-price-testing-gpt35-v1-test --work-dir workspace --llm-name gpt-3.5-turbo-1106 --edit-script-llm-name gpt-3.5-turbo-1106 --fast-llm-name gpt-3.5-turbo-1106 --agent-type SimpleAssistantAgent"
-
-python -u -m MLAgentBench_v2.runner --python $(which python) --task home-data-for-ml-course --device 0 --log-dir house-price-testing_gpt35_v3_curriculum_assistant --work-dir workspace --llm-name gpt-3.5-turbo-1106 --edit-script-llm-name gpt-3.5-turbo-1106 --fast-llm-name gpt-3.5-turbo-1106 --agent-type CurriculumAndAssistantAgent
+Run "python -u -m MLAgentBench_v2.runner --python $(which python) --task home-data-for-ml-course --device 0 --log-dir house-price-testing_gpt35_v1_test --work-dir workspace --llm-name gpt-3.5-turbo-1106 --edit-script-llm-name gpt-3.5-turbo-1106 --fast-llm-name gpt-3.5-turbo-1106 --agent-type SimpleAssistantAgent"
