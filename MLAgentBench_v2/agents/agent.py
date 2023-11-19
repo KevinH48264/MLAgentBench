@@ -115,10 +115,6 @@ class SimpleAssistantAgent(Agent):
 
         while True:
             # Add a Plan
-            next_step = complete_text_openai(self.initial_prompt + "\nWhat is the next best action I should take. Be sure to look at the most recent action, result, and answer states because if I failed in completing a step, you should give me an easier next step. Only respond with the action I should take.", system_prompt=self.system_prompt, model=self.model)
-            print("\nThis is the next step reported: ", next_step)
-
-            # Assistants API
             self.initial_prompt = f"""You are a helpful research assistant. Given a research problem, files, tools, and at most 5 of your most recent action, result, and answer, your goal is to choose and take the next best action and tool that you think could lead to a better answer and get you closer to solving the research problem. 
 
             Research Problem: {self.research_problem}
@@ -127,7 +123,11 @@ class SimpleAssistantAgent(Agent):
             Most recent files, action, result, and answer states (oldest to newest):
             {self.answer_states}        
             """
+            
+            next_step = complete_text_openai(self.initial_prompt + "\nWhat is the next best action I should take. Be sure to look at the most recent action, result, and answer states because if I failed in completing a step, you should give me an easier next step. Only respond with the action I should take.", system_prompt=self.system_prompt, model=self.model)
+            print("\nThis is the next step reported: ", next_step)
 
+            # Assistants API
             # Invoke the Assistants API to answer
             with open(self.main_log_path, "a", 1) as log_file:
                 log_file.write(f"\nCalling Assistants API with initial prompt: ")

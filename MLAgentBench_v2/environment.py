@@ -56,10 +56,10 @@ class Environment:
         self.files = os.listdir(self.work_dir)
         self.max_states = 5
         self.answer_states = [{
-            "files": self.files,
             "action": "None",
             "result": "None",
             "answer_state": "None",
+            "files": self.files,
         }] # s_t = [(s_t-5, answer_state, files)..., (s_t-2, answer_state, files), (s_t-1, answer_state, files), (s_t, answer_state, files)]. # potentially, we can add a research_log of steps that were taken to achieve a state and help guide future steps to be taken, like a MCTS
 
         # Set up actions
@@ -284,10 +284,10 @@ class Environment:
         new_answer_state = complete_text_openai(prompt=user_prompt, system_prompt=system_prompt, model=self.model, log_file=self.main_log_path)
 
         self.answer_states.append({
-            "files": self.files,
             "action": action,
             "result": result,
             "answer_state": new_answer_state,
+            "files": self.files,
         })
         while len(self.answer_states) > self.max_states:
             self.answer_states.pop(0)
@@ -335,6 +335,12 @@ class Environment:
         @self.log_decorator
         def wrapped_write_file(file_name='', content='', **kwargs):
             try:
+                # Extract the directory path from the full file path and create directory if necessary
+                directory = os.path.dirname(os.path.join(self.work_dir, file_name))
+                if not os.path.exists(directory):
+                    os.makedirs(directory)
+
+                # Write the file
                 with open(os.path.join(self.work_dir, file_name), "w") as f:
                     f.write(content)
                 observation = f"File {file_name} written successfully."

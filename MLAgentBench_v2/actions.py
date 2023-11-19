@@ -192,7 +192,7 @@ TOOL_DESCRIPTIONS = [
                 },
                 "content": {
                     "type": "string",
-                    "description": "The content to be written to the file. Please note that the current working directory that these files will be executed from if necessary will be from the workspace directory. Therefore, if you are using a file path, please make it in relation to the workspace directory being your root directory. All starter files like train.csv should be referenced as train.csv because all starter files are in the workspace directory. This content should be in valid JSON format where newlines are escaped otherwise it won't be parsed correctly."
+                    "description": "The content to be written to the file. Please know that the execute script function will execute from the same current working directory. Also that execute script will only output the stdout of the script, so do not use visualizations or other outputs that are not stdout."
                 }
             },
             "required": ["file_name", "content"]
@@ -268,7 +268,7 @@ TOOL_DESCRIPTIONS = [
             "properties": {
                 "script_name": {
                     "type": "string",
-                    "description": "A valid python script name with relative path to current directory if needed"
+                    "description": "A valid python script name with relative path to current directory if needed. You can only execute scripts and files in the current directory."
                 }
             },
             "required": ["script_name"]
