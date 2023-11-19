@@ -53,6 +53,9 @@ def prepare_task(work_dir, task_name, task_type, python="python"):
             if task_type == "kaggle":
                 prepare_kaggle(work_dir, task_name)
 
+                # Ensure that kaggle directory is not without files
+                assert(len(os.listdir(work_dir)) != 0)
+
         # Set the updated workspace directory to called the branch and overwrite if necessary
         new_dir = f"{work_dir}_branch"
         if os.path.exists(new_dir):

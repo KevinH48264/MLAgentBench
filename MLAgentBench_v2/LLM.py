@@ -229,7 +229,7 @@ def complete_text_openai(prompt, system_prompt="You are a helpful assistant.", s
     #         log_file.write(f"\nPrompt: {prompt}\n\nCompletion: {completion}\n")
     return completion
 
-def complete_text(prompt, log_file, model, json=False, **kwargs):
+def complete_text(prompt, model, log_file=None, json=False, **kwargs):
     """ Complete text using the specified model with appropriate API. """
     print("COMPLETE TEXT")
 
@@ -241,7 +241,7 @@ def complete_text(prompt, log_file, model, json=False, **kwargs):
         completion = complete_text_crfm(prompt, stop_sequences=["Observation:"], log_file=log_file, model=model, **kwargs)
     else:
         # use OpenAI API
-        completion = complete_text_openai(prompt, stop_sequences=["Observation:"], log_file=log_file, model=model, json=json, **kwargs)
+        completion = complete_text_openai(prompt, model=model, json_required=json, **kwargs)
     return completion
 
 # specify fast models for summarization etc

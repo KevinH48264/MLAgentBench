@@ -27,7 +27,7 @@ import functools
 from openai import OpenAI
 import openai
 from dotenv import load_dotenv
-from .LLM import complete_text_fast, complete_text_openai
+from .LLM import complete_text_fast, complete_text_openai, complete_text
 load_dotenv()
 
 import MLAgentBench_v2.high_level_actions as high_level_actions
@@ -89,7 +89,7 @@ class Environment:
                 # 'openaiAssistantCreateRun': pass,
                 # 'openaiAssistantListThreadMessageCompletion': pass,
             }
-        self.final_answer = False
+        # self.final_answer = False
 
         # Assistants API specific instantiation
         openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -111,83 +111,11 @@ class Environment:
         # self.transition = None # Transition probabilities between states. Problem, how do you operate when you don't even know what s' is until you take action a from state s?
         # self.reward = S x A = reward function. # LLM. The agent is the reward modeler based on the Eureka paper. 
 
-    ############################## getters ########################################
+        # Checks
+        assert(self.research_problem is not None)
+        assert("workspace" in self.work_dir and "branch" in self.work_dir) # we should only list files in the workspace and branch
+        assert(len(self.tool_descriptions) == len(self.available_actions.keys())) # action descriptions should be the same as action functions
 
-    @property
-    def research_problem(self):
-        return self._research_problem
-
-    @property
-    def benchmark_folder_name(self):
-        return self._benchmark_folder_name
-
-    @property
-    def log_dir(self):
-        return self._log_dir
-
-    @property
-    def work_dir(self):
-        return self._work_dir
-
-    @property
-    def tool_descriptions(self):
-        return self._tool_descriptions
-
-    @property
-    def available_actions(self):
-        return self._available_actions
-    
-    @property
-    def args(self):
-        return self._args
-
-    @property
-    def start_time(self):
-        return self._start_time
-    
-    ############################## internal functions ########################################
-
-    def __enter__(self):
-        # set time out
-        def signal_handler(signum, frame):
-            raise TimeoutException("Timed out!")
-        signal.signal(signal.SIGALRM, signal_handler)
-        signal.alarm(self.args.max_time)
-        return self
-    
-    def __exit__(self, exc_type, exc_value, traceback):  
-        # save error message
-        active = active_children()
-        print(f'Active Children: {len(active)}')
-        # terminate all active children
-        for child in active:
-            child.terminate()
-        # block until all children have closed
-        for child in active:
-            child.join()
-        # report active children
-        active = active_children()
-        print(f'Active Children: {len(active)}')
-            
-        if traceback is not None:
-            print("Error message saved in error.txt")
-            open(os.path.join(self.log_dir, "error.txt"), "w").write(''.join(format_exception(exc_type, exc_value, traceback)))
-        open(os.path.join(self.log_dir, "overall_time.txt"), "w").write(str(time.time() - self.start_time))
-            
-    ################################# public functions ########################################
-
-    def is_final(self):
-        """Check if the task has reached a final state, either by reaching the maximum steps or time, or because the agent has submitted a final answer. """
-        if self.num_steps >= self.args.max_steps or time.time() - self.start_time > self.args.max_time:
-            return True, None
-            
-        if self.final_answer:
-            final_answer_evaluation = input(f"\nFinal answer submitted: {self.final_answer} Did the agent submit a valid final answer? If yes, respond with 'yes'. If not, provide feedback. ")
-            if final_answer_evaluation == "yes":
-                return True, None
-            return False, final_answer_evaluation
-        
-        return False, None
 
     ############## for logging ##############
 
@@ -198,6 +126,7 @@ class Environment:
             # Update files
             self.files = os.listdir(self.work_dir)
             kwargs['work_dir'] = self.work_dir # Update to actual work_dir
+            assert(kwargs['work_dir'] == self.work_dir) # Ensure that the work_dir sent into any function is the work directory and nothing else
 
             # Update research log
             try:
@@ -294,23 +223,30 @@ class Environment:
 
     ############## for actions ##############
     
-    # TODO: This can likely be fixed by actually putting all functions in here
     def reflection(self, **kwargs):
         @self.log_decorator
-        def wrapped_reflection(things_to_reflect_on, work_dir = ".", **kwargs):
-            research_log_content = read_file("main_log.txt", work_dir = work_dir,  **kwargs)
+        def wrapped_reflection(things_to_reflect_on="", work_dir = ".", **kwargs):
+            formatted_answer_states = ""
+            for idx, answer_state in enumerate(self.answer_states):
+                formatted_answer_states += "\nStep: " + str(idx) 
+                formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
+                formatted_answer_states += "\nAction: " + answer_state['action'] 
+                # formatted_answer_states += "\nResult: " + answer_state['result'] 
+                formatted_answer_states += "\nAnswer: " + answer_state['answer_state'] 
 
             prompt = f"""We are trying to solve this research problem: {self.research_problem}
+
             Your current research log:
             ```
-            {research_log_content}
+            {formatted_answer_states}
             ```
+
             Reflect on this: {things_to_reflect_on} 
             
             Give an answer in natural language paragraphs as truthfully as possible. 
             """
 
-            reflection = complete_text_fast(prompt, log_file=self.main_log_path)
+            reflection = complete_text(prompt, model=self.model)
             return f"Reflection: {reflection}\n"
         return wrapped_reflection(**kwargs)
 
@@ -323,6 +259,7 @@ class Environment:
     def read_file(self, **kwargs):
         @self.log_decorator
         def wrapped_read_file(file_name, work_dir = '.', max_char_read = 5000, **kwargs):
+            assert("workspace" in self.work_dir and "branch" in self.work_dir) # we should only list files in the workspace and branch
             try:
                 observation = open(os.path.join(work_dir, file_name)).read()
                 return observation[:max_char_read]
@@ -331,7 +268,6 @@ class Environment:
         return wrapped_read_file(max_char_read = 2000, **kwargs)
 
     def write_file(self, **kwargs):
-        print("WRITE FILE WAS CALLED", kwargs)
         @self.log_decorator
         def wrapped_write_file(file_name='', content='', **kwargs):
             try:
@@ -353,9 +289,8 @@ class Environment:
     def execute_script(self, **kwargs):
         @self.log_decorator
         def wrapped_execute_script(script_name, work_dir = ".", **kwargs):
-            print("\nEXECUTE SCRIPT WAS CALLED")
-            print("\nRunning execute script! From directory: ", os.getcwd(), " work_dir: ", work_dir)
-            print("THIS IS THE SCRIPT WE'RE LOOKING FOR: ", os.path.join(work_dir, script_name))
+            assert("workspace" in self.work_dir and "branch" in self.work_dir) # we should only list files in the workspace and branch
+
             if not os.path.exists(os.path.join(work_dir, script_name)):
                 raise EnvException(f"The file {script_name} does not exist.")
             try:
@@ -431,3 +366,83 @@ class Environment:
             except:
                 raise EnvException(f"Web search failed.")
         return wrapped_web_search(**kwargs)
+    
+
+    ############################## internal functions ########################################
+
+    def __enter__(self):
+        # set time out
+        def signal_handler(signum, frame):
+            raise TimeoutException("Timed out!")
+        signal.signal(signal.SIGALRM, signal_handler)
+        signal.alarm(self.args.max_time)
+        return self
+    
+    def __exit__(self, exc_type, exc_value, traceback):  
+        # save error message
+        active = active_children()
+        print(f'Active Children: {len(active)}')
+        # terminate all active children
+        for child in active:
+            child.terminate()
+        # block until all children have closed
+        for child in active:
+            child.join()
+        # report active children
+        active = active_children()
+        print(f'Active Children: {len(active)}')
+            
+        if traceback is not None:
+            print("Error message saved in error.txt")
+            open(os.path.join(self.log_dir, "error.txt"), "w").write(''.join(format_exception(exc_type, exc_value, traceback)))
+        open(os.path.join(self.log_dir, "overall_time.txt"), "w").write(str(time.time() - self.start_time))
+           
+    
+    ############################## getters ########################################
+
+    @property
+    def research_problem(self):
+        return self._research_problem
+
+    @property
+    def benchmark_folder_name(self):
+        return self._benchmark_folder_name
+
+    @property
+    def log_dir(self):
+        return self._log_dir
+
+    @property
+    def work_dir(self):
+        return self._work_dir
+
+    @property
+    def tool_descriptions(self):
+        return self._tool_descriptions
+
+    @property
+    def available_actions(self):
+        return self._available_actions
+    
+    @property
+    def args(self):
+        return self._args
+
+    @property
+    def start_time(self):
+        return self._start_time
+     
+    ################################# public functions ########################################
+
+    def is_final(self):
+        """Check if the task has reached a final state, either by reaching the maximum steps or time, or because the agent has submitted a final answer. """
+        if self.num_steps >= self.args.max_steps or time.time() - self.start_time > self.args.max_time:
+            return True, None
+            
+        if self.final_answer:
+            final_answer_evaluation = input(f"\nFinal answer submitted: {self.final_answer} Did the agent submit a valid final answer? If yes, respond with 'yes'. If not, provide feedback. ")
+            if final_answer_evaluation == "yes":
+                return True, None
+            return False, final_answer_evaluation
+        
+        return False, None

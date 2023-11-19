@@ -1,6 +1,6 @@
 """ This file defines the basic agent class that can be used to implement different agents. 
 
-This should be a lightweight agent class that demos how to solve the research problem via a simple init() and run() function. Perhaps the interface run() function just calls the Assistants API until it works with 1 prompt with the research problem.
+This should be a lightweight agent class that demos how to solve the research problem via a simple init() and run() function. 
 
 The goal is that the class agent interface should be extensible to other agent frameworks like Eureka, Voyager, OPRO, and AutoGen.
 
@@ -9,8 +9,9 @@ The Abstract Base Class should just define the structure and exepcted behavior o
 
 Requirements:
 1. init()
+- Reward / Goal
+- States
 - Actions
-- Logging
 - Workspace
 2. run()
 - Iterative cycle of calling LLM with Actions and Workspace, and logging it all
@@ -103,6 +104,14 @@ class SimpleAssistantAgent(Agent):
     def run(self):
         print("Starting to run Simple Assistant Agent")
         self.system_prompt = '''You are a helpful and first-rate research assistant.'''
+        self.initial_prompt = f"""You are a helpful research assistant. Given a research problem, files, tools, and at most 5 of your most recent action, result, and answer, your goal is to choose and take the next best action and tool that you think could lead to a better answer and get you closer to solving the research problem. 
+
+        Research Problem: {self.research_problem}
+        Current Files: {self.files}
+        Tools / functions: {self.available_actions.keys()}
+        Most recent files, action, result, and answer states (oldest to newest):
+        {self.answer_states}        
+        """
 
         # Instantiate an Assistant
         self.assistant = self.client.beta.assistants.create(
@@ -113,20 +122,7 @@ class SimpleAssistantAgent(Agent):
         )
         self.thread = self.client.beta.threads.create()
 
-        while True:
-            # Add a Plan
-            self.initial_prompt = f"""You are a helpful research assistant. Given a research problem, files, tools, and at most 5 of your most recent action, result, and answer, your goal is to choose and take the next best action and tool that you think could lead to a better answer and get you closer to solving the research problem. 
-
-            Research Problem: {self.research_problem}
-            Current Files: {self.files}
-            Tools / functions: {self.available_actions.keys()}
-            Most recent files, action, result, and answer states (oldest to newest):
-            {self.answer_states}        
-            """
-            
-            next_step = complete_text_openai(self.initial_prompt + "\nWhat is the next best action I should take. Be sure to look at the most recent action, result, and answer states because if I failed in completing a step, you should give me an easier next step. Only respond with the action I should take.", system_prompt=self.system_prompt, model=self.model)
-            print("\nThis is the next step reported: ", next_step)
-
+        while True:   
             # Assistants API
             # Invoke the Assistants API to answer
             with open(self.main_log_path, "a", 1) as log_file:
@@ -208,8 +204,8 @@ class SimpleAssistantAgent(Agent):
             completion = messages.data[0].content[0].text.value
 
             # Check if completion is successful
-            finished = input(f'This is the final message: {completion}. Are they finished? (y/n): ')
-            if finished == 'y':
+            continue_res = input(f'This is the final message: {completion}. Do you want them to continue (y/n): ')
+            if continue_res == 'n':
                 break
 
         return "Finished successfully! Final message: " + completion

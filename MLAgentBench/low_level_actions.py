@@ -87,6 +87,7 @@ def check_file_in_work_dir(arg_names, **kwargs):
 @check_file_in_work_dir(["dir_path"])
 @record_low_level_step
 def list_files( dir_path, work_dir = ".", **kwargs):
+    assert(work_dir.contains("workspace")) # we should only list files in the workspace
     try:
         observation = subprocess.check_output(["ls", "-F", os.path.join(work_dir,dir_path)]).decode("utf-8")
         return observation
