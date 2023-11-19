@@ -1,4 +1,4 @@
-#!/bin/bash
+#/bin/bash
 
 # Export the Kaggle configuration directory
 export KAGGLE_CONFIG_DIR=/MLAgentBench/.kaggle

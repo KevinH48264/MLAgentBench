@@ -1,0 +1,1 @@
+* text=auto eol=lf # necessary for the .sh script to save in LF format, otherwise manually turn your terminal to LF

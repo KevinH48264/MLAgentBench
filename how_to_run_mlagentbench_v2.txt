@@ -1,7 +1,7 @@
 1. Ensure that in your root folder, you have “.kaggle/kaggle.json” with your API credentials
 2. You need to be a root user, so run “docker run -it --user root -v ${PWD}:/MLAgentBench -w /MLAgentBench qhwang123/researchassistant:latest”
 
-# Run './mlagentbench_v2_setup.sh' OR follow steps 3-7
+# Run 'source mlagentbench_v2_setup.sh' OR follow steps 3-7
 3. Run “export KAGGLE_CONFIG_DIR=/MLAgentBench/.kaggle”
 4. Probably need to “pip install kaggle”
 5. Need to “sudo apt-get install unzip”

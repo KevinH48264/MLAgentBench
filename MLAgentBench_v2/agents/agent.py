@@ -61,7 +61,7 @@ class SimpleFunctionCallingAgent(Agent):
         print("Starting to run Simple Function Calling Agent")
         self.system_prompt = '''You are a helpful and first-rate research assistant.'''
 
-        MAX_STEPS = 100
+        MAX_STEPS = 10
         count = 0
         while True:
             # Create the prompt for function calling
@@ -120,7 +120,7 @@ class SimpleAssistantAgent(Agent):
         )
         self.thread = self.client.beta.threads.create()
 
-        MAX_STEPS = 100
+        MAX_STEPS = 10
         count = 0
         while True:   
             # Assistants API
