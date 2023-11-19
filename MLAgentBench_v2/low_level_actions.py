@@ -110,8 +110,8 @@ def read_file(file_name, work_dir = '.', max_char_read = 5000, **kwargs):
         raise EnvException(f"cannot read file {file_name}")
 
 
-@check_file_in_work_dir(["file_name"])
-@check_file_read_only(["file_name"])
+# @check_file_in_work_dir(["file_name"])
+# @check_file_read_only(["file_name"])
 # @record_low_level_step
 def write_file(file_name, content, work_dir = ".", **kwargs):
     try:

@@ -28,12 +28,12 @@ class CurriculumAndAssistantAgent(Agent):
         Most recent files, action, result, and answer states (oldest to newest):
         {formatted_answer_states}
 
-        You should respond with a step-by-step plan.       
+        You should only respond with a clear step-by-step plan.       
         """
         
         with open(self.main_log_path, "a", 1) as log_file:
             log_file.write(f"\n\nPLANNING AGENT with answer states: {formatted_answer_states}")
-        self.curriculum = complete_text_openai(self.initial_prompt, system_prompt=self.system_prompt, model=self.model)
+        self.curriculum = complete_text_openai(self.initial_prompt, system_prompt=self.system_prompt, model=self.model, max_tokens_to_sample=500)
         print("Here is the curriculum: ", self.curriculum)
         with open(self.main_log_path, "a", 1) as log_file:
             log_file.write(f"\n\nPLANNING AGENT output: {self.curriculum}")

@@ -333,8 +333,14 @@ class Environment:
     def write_file(self, **kwargs):
         print("WRITE FILE WAS CALLED", kwargs)
         @self.log_decorator
-        def wrapped_write_file(**kwargs):
-            return write_file(**kwargs)
+        def wrapped_write_file(file_name='', content='', **kwargs):
+            try:
+                with open(os.path.join(self.work_dir, file_name), "w") as f:
+                    f.write(content)
+                observation = f"File {file_name} written successfully."
+                return observation
+            except:
+                raise EnvException(f"cannot write file {file_name}")
         return wrapped_write_file(**kwargs)
 
     # TODO: add the "check_file_in_work_dir" function from before
