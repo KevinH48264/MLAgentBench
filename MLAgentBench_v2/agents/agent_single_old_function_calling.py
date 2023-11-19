@@ -35,11 +35,11 @@ class SingleOldFunctionCallingAgent(Agent):
             {formatted_answer_states}        
             """
 
-            # Ask for a direct next step for helping function calling API
+            # 1) NEXT STEP AGENT: Ask for a direct next step for helping function calling API
             next_step = complete_text_openai(self.initial_prompt + "\nWhat is the next best action I should take. Be sure to look at the most recent action, result, and answer states because if I failed in completing a step, you should give me an easier next step. Only respond with the action I should take.", system_prompt=self.system_prompt, model=self.model)
             print("\nThis is the next step reported: ", next_step)
 
-            # Call the function calling API by giving tools and available functions
+            # 2) FUNCTION CALLING AGENT: Call the function calling API by giving tools and available functions
             complete_text_openai(next_step, system_prompt=self.system_prompt, model=self.model, tools=self.tool_descriptions, available_functions=self.available_actions)
 
             # Add that information about the next step into the answer_state action column
