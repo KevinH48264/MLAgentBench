@@ -54,7 +54,7 @@ class Environment:
             task_type = args.task_type
         )
         self.files = os.listdir(self.work_dir)
-        self.max_states = 5
+        self.max_states = 8
         self.answer_states = [{
             "action": "None",
             "result": "None",

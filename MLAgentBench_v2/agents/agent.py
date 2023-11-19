@@ -32,6 +32,7 @@ class Agent:
 
         # States
         self.answer_states = env.answer_states
+        self.max_states = env.max_states
 
         # Actions
         self.tool_descriptions = env.tool_descriptions
@@ -60,7 +61,7 @@ class SimpleFunctionCallingAgent(Agent):
         print("Starting to run Simple Function Calling Agent")
         self.system_prompt = '''You are a helpful and first-rate research assistant.'''
 
-        MAX_STEPS = 10
+        MAX_STEPS = 100
         count = 0
         while True:
             # Create the prompt for function calling
@@ -70,9 +71,9 @@ class SimpleFunctionCallingAgent(Agent):
                 formatted_answer_states += "\nStep: " + str(idx) 
                 formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
                 formatted_answer_states += "\nAction: " + answer_state['action'] 
-                # formatted_answer_states += "\nResult: " + answer_state['result'] 
+                formatted_answer_states += "\nResult: " + answer_state['result'] 
                 formatted_answer_states += "\nAnswer: " + answer_state['answer_state'] 
-            self.initial_prompt = f"""You are a helpful research assistant. Given a research problem, files, tools, and at most 5 of your most recent files, action, result, and answer, your goal is to choose and take the next best action and tool that you think could lead to a better answer and get you closer to solving the research problem. 
+            self.initial_prompt = f"""You are a helpful research assistant. Given a research problem, files, tools, and at most {self.max_states} of your most recent files, action, result, and answer, your goal is to choose and take the next best action and tool that you think could lead to a better answer and get you closer to solving the research problem. 
 
             Research Problem: {self.research_problem}
             Current Files: {self.files}
@@ -81,16 +82,20 @@ class SimpleFunctionCallingAgent(Agent):
             {formatted_answer_states}        
             """
 
-            # 1) NEXT STEP AGENT: Ask for a direct next step for helping function calling API
-            next_step = complete_text_openai(self.initial_prompt + "\nWhat is the next best action I should take. Be sure to look at the most recent action, result, and answer states because if I failed in completing a step, you should give me an easier next step. Only respond with the action I should take.", system_prompt=self.system_prompt, model=self.model)
-            print("\nThis is the next step reported: ", next_step)
+            # Log initial prompt
+            with open(self.main_log_path, "a", 1) as log_file:
+                log_file.write(f"\nCalling Function Calling API with initial prompt: ")
+                log_file.write(self.initial_prompt)
+                log_file.write("\n")
 
-            # 2) FUNCTION CALLING AGENT: Call the function calling API by giving tools and available functions
-            complete_text_openai(next_step, system_prompt=self.system_prompt, model=self.model, tools=self.tool_descriptions, available_functions=self.available_actions)
+            # FUNCTION CALLING AGENT: Call the function calling API by giving tools and available functions
+            completion = complete_text_openai(self.initial_prompt, system_prompt=self.system_prompt, model=self.model, tools=self.tool_descriptions, available_functions=self.available_actions)
 
-            # Optional: Add that information about the next step into the answer_state action column
-            self.answer_states[-1]['action'] = "Assigned action: " + next_step + "\nTaken action: " + self.answer_states[-1]['action']
-            completion = str(self.answer_states[-1])
+            # Log completion
+            with open(self.main_log_path, "a", 1) as log_file:
+                log_file.write(f"\Function Calling API output: ")
+                log_file.write(completion)
+                log_file.write("\n")
 
             count += 1
             if count > MAX_STEPS:
@@ -115,17 +120,26 @@ class SimpleAssistantAgent(Agent):
         )
         self.thread = self.client.beta.threads.create()
 
+        MAX_STEPS = 100
+        count = 0
         while True:   
             # Assistants API
             # Update answer states each round
             assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
-            self.initial_prompt = f"""You are a helpful research assistant. Given a research problem, files, tools, and at most 5 of your most recent action, result, and answer, your goal is to choose and take the next best action and tool that you think could lead to a better answer and get you closer to solving the research problem. 
+            formatted_answer_states = ""
+            for idx, answer_state in enumerate(self.answer_states):
+                formatted_answer_states += "\nStep: " + str(idx) 
+                formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
+                formatted_answer_states += "\nAction: " + answer_state['action'] 
+                formatted_answer_states += "\nResult: " + answer_state['result'] 
+                formatted_answer_states += "\nAnswer: " + answer_state['answer_state'] 
+            self.initial_prompt = f"""You are a helpful research assistant. Given a research problem, files, tools, and at most {self.max_states} of your most recent action, result, and answer, your goal is to choose and take the next best action and tool that you think could lead to a better answer and get you closer to solving the research problem. 
 
             Research Problem: {self.research_problem}
             Current Files: {self.files}
             Tools / functions: {self.available_actions.keys()}
             Most recent files, action, result, and answer states (oldest to newest):
-            {self.answer_states}        
+            {formatted_answer_states}        
             """
 
             # Invoke the Assistants API to answer
@@ -207,6 +221,14 @@ class SimpleAssistantAgent(Agent):
             messages = self.client.beta.threads.messages.list(thread_id=self.thread.id)
             completion = messages.data[0].content[0].text.value
 
+            with open(self.main_log_path, "a", 1) as log_file:
+                log_file.write(f"\nCalling Assistants API Completion: ")
+                log_file.write(completion)
+                log_file.write("\n")
+            
+            count += 1
+            if count > MAX_STEPS:
+                break
             # Check if completion is successful
             # continue_res = input(f'This is the final message: {completion}. Do you want them to continue (y/n): ')
             # if continue_res == 'n':
