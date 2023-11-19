@@ -58,7 +58,7 @@ class Environment:
         self.answer_states = [{
             "files": self.files,
             "action": "None",
-            "previous_result": "None",
+            "result": "None",
             "answer_state": "None",
         }] # s_t = [(s_t-5, answer_state, files)..., (s_t-2, answer_state, files), (s_t-1, answer_state, files), (s_t, answer_state, files)]. # potentially, we can add a research_log of steps that were taken to achieve a state and help guide future steps to be taken, like a MCTS
 
@@ -72,7 +72,7 @@ class Environment:
                 # 'editScriptSegment': edit_script_lines,
                 'reflection': self.reflection,
                 # 'retrievalFromResearchLog': retrieval_from_research_log,
-                'listFiles': self.list_files,
+                # 'listFiles': self.list_files,
                 'readFile': self.read_file,
                 'writeFile': self.write_file,
                 # 'appendFile': append_file,

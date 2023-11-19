@@ -144,23 +144,23 @@ TOOL_DESCRIPTIONS = [
     #     }
     #     }
     # },
-    {
-        "type": "function",
-        "function": {
-        "name": "listFiles",
-        "description": "Use this to navigate the file system.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "dir_path": {
-                    "type": "string",
-                    "description": "A valid relative path to a directory, such as \".\" or \"folder1/folder2\""
-                }
-            },
-            "required": ["dir_path"]
-        }
-        }
-    },
+    # {
+    #     "type": "function",
+    #     "function": {
+    #     "name": "listFiles",
+    #     "description": "Use this to navigate the file system.",
+    #     "parameters": {
+    #         "type": "object",
+    #         "properties": {
+    #             "dir_path": {
+    #                 "type": "string",
+    #                 "description": "A valid relative path to a directory, such as \".\" or \"folder1/folder2\""
+    #             }
+    #         },
+    #         "required": ["dir_path"]
+    #     }
+    #     }
+    # },
     {
         "type": "function",
         "function": {

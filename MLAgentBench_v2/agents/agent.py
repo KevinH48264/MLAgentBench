@@ -20,6 +20,7 @@ The actual Child Class must implement all the abstract methods (init(), run())
 
 import time
 import json
+from MLAgentBench_v2.LLM import complete_text_openai
 
 # Updated base class that agents can take and fill in and iterate on
 class Agent:
@@ -67,6 +68,11 @@ class SimpleAssistantAgent(Agent):
         self.thread = self.client.beta.threads.create()
 
         while True:
+            # Add a Plan
+            next_step = complete_text_openai(self.initial_prompt + "\nWhat is the next best action I should take. Be sure to look at the most recent action, result, and answer states because if I failed in completing a step, you should give me an easier next step. Only respond with the action I should take.", system_prompt=self.system_prompt, model=self.model)
+            print("\nThis is the next step reported: ", next_step)
+
+            # Assistants API
             self.initial_prompt = f"""You are a helpful research assistant. Given a research problem, files, tools, and at most 5 of your most recent action, result, and answer, your goal is to choose and take the next best action and tool that you think could lead to a better answer and get you closer to solving the research problem. 
 
             Research Problem: {self.research_problem}

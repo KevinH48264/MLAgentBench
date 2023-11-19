@@ -12,9 +12,9 @@ Output:
 
 Principles:
 1. Agent interface
-- state (S) = #_relevant_steps * ({files, action, result, answer_state})
+- state (s) = #_relevant_steps * ({files, action, result, answer_state})
 - action space (A)
-- reward model (R) = research_problem
+- reward model (R(s)) = research_problem
 - policy (pi) = LLM
 - transition model (P(s'|s,a)) = executing in the reality
 
