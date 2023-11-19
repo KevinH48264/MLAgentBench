@@ -82,7 +82,7 @@ class Environment:
                 # 'pythonREPL': python_repl,
                 # 'requestHelp': self.request_help,
                 # 'finalAnswer': self.final_answer,
-                'webSearch': self.web_search,
+                # 'webSearch': self.web_search,
                 # 'openaiAssistantCreateAssistant': pass,
                 # 'openaiAssistantCreateThread': pass,
                 # 'openaiAssistantCreateThreadMessage': pass,

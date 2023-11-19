@@ -64,6 +64,7 @@ class SimpleFunctionCallingAgent(Agent):
         count = 0
         while True:
             # Create the prompt for function calling
+            assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
             formatted_answer_states = ""
             for idx, answer_state in enumerate(self.answer_states):
                 formatted_answer_states += "\nStep: " + str(idx) 
@@ -104,14 +105,6 @@ class SimpleAssistantAgent(Agent):
     def run(self):
         print("Starting to run Simple Assistant Agent")
         self.system_prompt = '''You are a helpful and first-rate research assistant.'''
-        self.initial_prompt = f"""You are a helpful research assistant. Given a research problem, files, tools, and at most 5 of your most recent action, result, and answer, your goal is to choose and take the next best action and tool that you think could lead to a better answer and get you closer to solving the research problem. 
-
-        Research Problem: {self.research_problem}
-        Current Files: {self.files}
-        Tools / functions: {self.available_actions.keys()}
-        Most recent files, action, result, and answer states (oldest to newest):
-        {self.answer_states}        
-        """
 
         # Instantiate an Assistant
         self.assistant = self.client.beta.assistants.create(
@@ -124,6 +117,17 @@ class SimpleAssistantAgent(Agent):
 
         while True:   
             # Assistants API
+            # Update answer states each round
+            assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
+            self.initial_prompt = f"""You are a helpful research assistant. Given a research problem, files, tools, and at most 5 of your most recent action, result, and answer, your goal is to choose and take the next best action and tool that you think could lead to a better answer and get you closer to solving the research problem. 
+
+            Research Problem: {self.research_problem}
+            Current Files: {self.files}
+            Tools / functions: {self.available_actions.keys()}
+            Most recent files, action, result, and answer states (oldest to newest):
+            {self.answer_states}        
+            """
+
             # Invoke the Assistants API to answer
             with open(self.main_log_path, "a", 1) as log_file:
                 log_file.write(f"\nCalling Assistants API with initial prompt: ")
@@ -204,8 +208,8 @@ class SimpleAssistantAgent(Agent):
             completion = messages.data[0].content[0].text.value
 
             # Check if completion is successful
-            continue_res = input(f'This is the final message: {completion}. Do you want them to continue (y/n): ')
-            if continue_res == 'n':
-                break
+            # continue_res = input(f'This is the final message: {completion}. Do you want them to continue (y/n): ')
+            # if continue_res == 'n':
+            #     break
 
         return "Finished successfully! Final message: " + completion

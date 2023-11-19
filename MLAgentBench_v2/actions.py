@@ -326,22 +326,22 @@ TOOL_DESCRIPTIONS = [
     #     }
     #     }
     # },
-    {
-        "type": "function",
-        "function": {
-        "name": "webSearch",
-        "description": "Use this to search the web for information.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The query to search on the internet"
-                }
-            },
-            "required": ["query"]
-        }
-        }
-    }
+    # {
+    #     "type": "function",
+    #     "function": {
+    #     "name": "webSearch",
+    #     "description": "Use this to search the web for information.",
+    #     "parameters": {
+    #         "type": "object",
+    #         "properties": {
+    #             "query": {
+    #                 "type": "string",
+    #                 "description": "The query to search on the internet"
+    #             }
+    #         },
+    #         "required": ["query"]
+    #     }
+    #     }
+    # }
 ] # TODO: Can make more simple basic functions
 # https://platform.openai.com/docs/assistants/tools
