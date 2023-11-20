@@ -55,7 +55,7 @@ class Environment:
             task_type = args.task_type
         )
         self.files = os.listdir(self.work_dir)
-        self.max_states = 8
+        self.max_states = 2
         self.answer_states = [{
             "action": "None",
             "result": "None",
@@ -361,7 +361,7 @@ class Environment:
     # Adding code completion here so that it's easier to log
     def complete_text_openai(self, **kwargs):
         @self.log_decorator
-        def wrapped_complete_text_openai(system_prompt="You are a helpful assistant.", user_prompt="", stop_sequences=[], model=self.model, max_tokens_to_sample=2000, temperature=0.2, json_required=False, tools=None, available_functions=None, **kwargs):
+        def wrapped_complete_text_openai(system_prompt="You are a helpful assistant.", user_prompt="", stop_sequences=[], model=self.model, max_tokens_to_sample=2000, temperature=0.2, json_required=False, tools=None, available_functions=None, max_prompt_chars=10000, **kwargs): # 10000 chars = 2500 tokens
             """ Call the OpenAI API to complete a prompt."""
             kwargs.pop('work_dir', None) # Chat completions can't take work_dir as an arg
             raw_request = {
@@ -380,7 +380,7 @@ class Environment:
                 raw_request["tool_choice"] = "auto"
                 
             # Call the API
-            messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+            messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt[:max_prompt_chars]}]
             response = self.client.chat.completions.create(**{"messages": messages,**raw_request})
             completion = response.choices[0].message.content
             tool_calls = response.choices[0].message.tool_calls
