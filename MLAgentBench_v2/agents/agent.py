@@ -32,15 +32,16 @@ class Agent:
 
         # States
         self.answer_states = env.answer_states
-        self.formatted_answer_states = env.formatted_answer_states
         self.max_states = env.max_states
+        self.formatted_answer_states = env.formatted_answer_states
+        self.formatted_action_history = env.formatted_action_history
 
         # Actions
         self.tool_descriptions = env.tool_descriptions
         self.available_actions = env.available_actions
         self.client = env.client
         self.model = env.model
-        self.formatted_action_history = env.formatted_action_history
+        self.complete_text_openai = env.complete_text_openai
 
         self.work_dir = env.work_dir
         self.files = env.files

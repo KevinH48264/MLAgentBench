@@ -133,11 +133,6 @@ class Environment:
             try:
                 print(f"\nStep: {self.num_steps}\nCalling function {func.__name__}(args = {args}, kwargs = {kwargs})\n")
 
-                # Log the function call
-                filtered_kwargs = {k: v for k, v in kwargs.items() if k != 'work_dir'}
-                # with open(self.main_log_path, "a", 1) as log_file:
-                #     log_file.write(f"\nStep: {self.num_steps}\nCalling function {func.__name__}({args}, {filtered_kwargs})\n")
-
                 # Perform the actual function
                 result = func(*args, **kwargs)
 
@@ -163,18 +158,13 @@ class Environment:
                 print("--- TOOL ERROR ---", e)
             print("Finished!")
 
-            # Log the function output
-            # with open(self.main_log_path, "a", 1) as log_file:
-            #     log_file.write(f"\nFunction {func.__name__} returned: \n{result}\n")
-
             # Copy work_dir if it exists
             if self.work_dir and os.path.exists(self.work_dir):
                 dest_dir = os.path.join(self.log_dir, f"{self.num_steps}_work_dir")
                 shutil.copytree(self.work_dir, dest_dir, dirs_exist_ok=True)
 
-            self.num_steps += 1
-            
             # Update states
+            self.num_steps += 1
             kwargs['work_dir'] = "." # replace work_dir for the agent to stay in its workspace
             self.update_states(action=f"Calling function {func.__name__}(args = {args}, kwargs = {kwargs})", result=result)
             
@@ -368,6 +358,64 @@ class Environment:
                 raise EnvException(f"Web search failed.")
         return wrapped_web_search(**kwargs)
     
+    # Adding code completion here so that it's easier to log
+    def complete_text_openai(self, **kwargs):
+        @self.log_decorator
+        def wrapped_complete_text_openai(system_prompt="You are a helpful assistant.", user_prompt="", stop_sequences=[], model=self.model, max_tokens_to_sample=2000, temperature=0.2, json_required=False, tools=None, available_functions=None, **kwargs):
+            """ Call the OpenAI API to complete a prompt."""
+            kwargs.pop('work_dir', None) # Chat completions can't take work_dir as an arg
+            raw_request = {
+                "model": model,
+                "temperature": temperature,
+                "max_tokens": max_tokens_to_sample,
+                "stop": stop_sequences or None,  # API doesn't like empty list
+                **kwargs
+            }
+
+            # Add additional parameters if necessary (JSON or function calling)
+            if json_required and (model == "gpt-3.5-turbo-1106" or model == "gpt-4-1106-preview"):
+                raw_request["response_format"] = {"type": "json_object"}
+            if tools and available_functions:
+                raw_request["tools"] = tools
+                raw_request["tool_choice"] = "auto"
+                
+            # Call the API
+            messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+            response = self.client.chat.completions.create(**{"messages": messages,**raw_request})
+            completion = response.choices[0].message.content
+            tool_calls = response.choices[0].message.tool_calls
+
+            # Ensure that the completion is JSON parsable. If it isn't, ask GPT to make it JSON parsable by increasing max tokens
+            if json_required and (model == "gpt-3.5-turbo-1106" or model == "gpt-4-1106-preview"):
+                try:
+                    completion_json = json.loads(completion)
+                except:
+                    convert_to_json_prompt = f'''Close this incomplete JSON so that it's in proper JSON format: {completion}'''
+                    messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": convert_to_json_prompt}]
+                    raw_request["max_tokens"] = max_tokens_to_sample + 100
+                    response = self.client.chat.completions.create(**{"messages": messages,**raw_request})
+                    completion = response.choices[0].message.content
+
+            # Handle function calling
+            if tool_calls:
+                messages.append(response.choices[0].message)
+                for tool_call in tool_calls:
+                    function_name = tool_call.function.name
+                    function_to_call = available_functions[function_name]
+                    function_args = json.loads(tool_call.function.arguments)
+                    function_response = function_to_call(**function_args)
+                    messages.append(
+                        {
+                            "tool_call_id": tool_call.id,
+                            "role": "tool",
+                            "name": function_name,
+                            "content": function_response,
+                        }
+                    )
+                return "Function calling complete! Action and result should be saved to answer state."
+
+            return completion
+        return wrapped_complete_text_openai(**kwargs)
 
     ############################## internal functions ########################################
 
@@ -432,29 +480,6 @@ class Environment:
     @property
     def start_time(self):
         return self._start_time
-    
-    @property
-    def formatted_answer_states(self):
-        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
-        formatted_answer_states = ""
-        for idx, answer_state in enumerate(self.answer_states):
-            formatted_answer_states += "\nStep: " + str(idx) 
-            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
-            formatted_answer_states += "\nAction: " + answer_state['action'] 
-            formatted_answer_states += "\nResult: " + answer_state['result'] 
-            formatted_answer_states += "\nAnswer: " + answer_state['answer_state'] 
-        return formatted_answer_states
-    
-    @property
-    def formatted_action_history(self):
-        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
-        formatted_answer_states = ""
-        for idx, answer_state in enumerate(self.answer_states):
-            formatted_answer_states += "\nStep: " + str(idx) 
-            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
-            formatted_answer_states += "\nAction: " + answer_state['action'] 
-            formatted_answer_states += "\nResult: " + answer_state['result']
-        return formatted_answer_states
      
     ################################# public functions ########################################
 
@@ -471,4 +496,27 @@ class Environment:
         
         return False, None
     
+    def formatted_answer_states(self):
+        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
+        formatted_answer_states = ""
+        for idx, answer_state in enumerate(self.answer_states):
+            formatted_answer_states += "\n\nStep: " + str(idx) 
+            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
+            formatted_answer_states += "\nAction: " + answer_state['action'] 
+            formatted_answer_states += "\nResult: " + answer_state['result'] 
+            formatted_answer_states += "\nAnswer: " + answer_state['answer_state'] 
+        return formatted_answer_states
+    
+    def formatted_action_history(self, start_idx=0):
+        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
+        formatted_answer_states = ""
+        for idx, answer_state in enumerate(self.answer_states):
+            if idx < start_idx: # Only include steps starting at start_idx
+                continue
+
+            formatted_answer_states += "\n\nStep: " + str(idx) 
+            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
+            formatted_answer_states += "\nAction: " + answer_state['action'] 
+            formatted_answer_states += "\nResult: " + answer_state['result']
+        return formatted_answer_states
     
