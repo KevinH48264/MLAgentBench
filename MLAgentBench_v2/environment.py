@@ -21,8 +21,8 @@ import fnmatch
 import signal
 from traceback import format_exception
 from multiprocessing import active_children
-import readline # to make sure input() works properly
-from dacite import from_dict
+# import readline # to make sure input() works properly # Not on Windows
+# from dacite import from_dict # Not on Windows
 import functools
 from openai import OpenAI
 import openai
@@ -35,14 +35,15 @@ from .schema import Step, Trace, EnvException, TooLongPromptError, LLMError, Enh
 from .LLM import complete_text_claude
 from .prepare_task import prepare_task
 from MLAgentBench_v2.actions import TOOL_DESCRIPTIONS
-from MLAgentBench.high_level_actions import understand_file, append_to_research_log, inspect_script_lines, edit_script, edit_script_lines, reflection, retrieval_from_research_log
-from MLAgentBench.low_level_actions import list_files, read_file, write_file, append_file, copy_file, undo_edit_script, execute_script, python_repl, request_help
+from MLAgentBench_v2.high_level_actions import understand_file, append_to_research_log, inspect_script_lines, edit_script, edit_script_lines, reflection, retrieval_from_research_log
+from MLAgentBench_v2.low_level_actions import list_files, read_file, write_file, append_file, copy_file, undo_edit_script, execute_script, python_repl, request_help
 
 class Environment:
     def __init__(self, args):
         # Note: This function should be given to the agent to figure out how to use the environment variables.
         print("Initializing environment...")
         self._args = args # Might be able to be deleted, more for other potentially deletable environment functions to use like signal alarm
+        print("args", args)
 
         # Set up workspace and research problem.
         with open('MLAgentBench_v2/research_problem.txt', 'r') as f:
@@ -431,6 +432,18 @@ class Environment:
     @property
     def start_time(self):
         return self._start_time
+    
+    @property
+    def formatted_answer_states(self):
+        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
+        formatted_answer_states = ""
+        for idx, answer_state in enumerate(self.answer_states):
+            formatted_answer_states += "\nStep: " + str(idx) 
+            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
+            formatted_answer_states += "\nAction: " + answer_state['action'] 
+            formatted_answer_states += "\nResult: " + answer_state['result'] 
+            formatted_answer_states += "\nAnswer: " + answer_state['answer_state'] 
+        return formatted_answer_states
      
     ################################# public functions ########################################
 
@@ -446,3 +459,5 @@ class Environment:
             return False, final_answer_evaluation
         
         return False, None
+    
+    

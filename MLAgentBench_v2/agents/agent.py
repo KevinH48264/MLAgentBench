@@ -32,6 +32,7 @@ class Agent:
 
         # States
         self.answer_states = env.answer_states
+        self.formatted_answer_states = env.formatted_answer_states
         self.max_states = env.max_states
 
         # Actions

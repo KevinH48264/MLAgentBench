@@ -4,6 +4,7 @@ workspace/
 .env
 **/__pycache__/
 *.pyc
+venv/
 
 # Misc
 openai_api_key.txt
