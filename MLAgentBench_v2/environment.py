@@ -115,7 +115,7 @@ class Environment:
         # Checks
         assert(self.research_problem is not None)
         assert("workspace" in self.work_dir and "branch" in self.work_dir) # we should only list files in the workspace and branch
-        assert(len(self.tool_descriptions) == len(self.available_actions.keys())) # action descriptions should be the same as action functions
+        assert(len(self.tool_descriptions) == len(list(self.available_actions.keys()))) # action descriptions should be the same as action functions
 
 
     ############## for logging ##############
@@ -208,7 +208,7 @@ class Environment:
 
         user_prompt = f'''Research Problem: {self.research_problem}
         Current Files: {self.files}
-        Tools / functions: {self.available_actions.keys()}
+        Tools / functions: {list(self.available_actions.keys())}
         Most recent files, action, result, and answer states (oldest to newest): {self.answer_states}  
 '''
         new_answer_state = complete_text_openai(prompt=user_prompt, system_prompt=system_prompt, model=self.model, log_file=self.main_log_path)
@@ -443,6 +443,17 @@ class Environment:
             formatted_answer_states += "\nAction: " + answer_state['action'] 
             formatted_answer_states += "\nResult: " + answer_state['result'] 
             formatted_answer_states += "\nAnswer: " + answer_state['answer_state'] 
+        return formatted_answer_states
+    
+    @property
+    def formatted_action_history(self):
+        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
+        formatted_answer_states = ""
+        for idx, answer_state in enumerate(self.answer_states):
+            formatted_answer_states += "\nStep: " + str(idx) 
+            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
+            formatted_answer_states += "\nAction: " + answer_state['action'] 
+            formatted_answer_states += "\nResult: " + answer_state['result']
         return formatted_answer_states
      
     ################################# public functions ########################################

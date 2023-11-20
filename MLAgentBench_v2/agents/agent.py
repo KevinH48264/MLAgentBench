@@ -40,6 +40,7 @@ class Agent:
         self.available_actions = env.available_actions
         self.client = env.client
         self.model = env.model
+        self.formatted_action_history = env.formatted_action_history
 
         self.work_dir = env.work_dir
         self.files = env.files
@@ -78,7 +79,7 @@ class SimpleFunctionCallingAgent(Agent):
 
             Research Problem: {self.research_problem}
             Current Files: {self.files}
-            Tools / functions: {self.available_actions.keys()}
+            Tools / functions: {list(self.available_actions.keys())}
             Most recent files, action, result, and answer states (oldest to newest):
             {formatted_answer_states}        
             """
@@ -138,7 +139,7 @@ class SimpleAssistantAgent(Agent):
 
             Research Problem: {self.research_problem}
             Current Files: {self.files}
-            Tools / functions: {self.available_actions.keys()}
+            Tools / functions: {list(self.available_actions.keys())}
             Most recent files, action, result, and answer states (oldest to newest):
             {formatted_answer_states}        
             """
@@ -185,7 +186,7 @@ class SimpleAssistantAgent(Agent):
                             print("Arguments was JSON parsed successfully")
                             function_output = self.available_actions[tool_function.name](**arguments)
                         except Exception as e:
-                            function_output = f"Tool function {tool_function.name} for tool_id {tool_id} does not exist and is not callable with arguments {tool_function.arguments}. Make sure you are using only tools listed here: {self.available_actions.keys()} with the right arguments."
+                            function_output = f"Tool function {tool_function.name} for tool_id {tool_id} does not exist and is not callable with arguments {tool_function.arguments}. Make sure you are using only tools listed here: {list(self.available_actions.keys())} with the right arguments."
 
                         print("Function output: ", function_output)
                         tool_outputs.append({

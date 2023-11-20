@@ -130,85 +130,85 @@ class InformationLibraryAgent(Agent):
 
     def run_assistant(self, system_prompt, user_prompt, agent_type):
         # Instantiate an Assistant
-            self.assistant = self.client.beta.assistants.create(
-                name="Research Agent",
-                instructions=system_prompt,
-                tools=self.tool_descriptions,
-                model=self.model
-            )
-            self.thread = self.client.beta.threads.create()
+        self.assistant = self.client.beta.assistants.create(
+            name="Research Agent",
+            instructions=system_prompt,
+            tools=self.tool_descriptions,
+            model=self.model
+        )
+        self.thread = self.client.beta.threads.create()
 
-            # Invoke the Assistants API to answer
-            self.client.beta.threads.messages.create(
-                thread_id=self.thread.id,
-                role="user",
-                content=user_prompt
-            )
-            run = self.client.beta.threads.runs.create(
-                thread_id=self.thread.id,
-                assistant_id=self.assistant.id,
-            )
-            if agent_type != "Critic":
-                with open(self.main_log_path, "a", 1) as f:
-                    f.write(f"\n\n {agent_type} Assistant was called! \n Prompt: {user_prompt}")
+        # Invoke the Assistants API to answer
+        self.client.beta.threads.messages.create(
+            thread_id=self.thread.id,
+            role="user",
+            content=user_prompt
+        )
+        run = self.client.beta.threads.runs.create(
+            thread_id=self.thread.id,
+            assistant_id=self.assistant.id,
+        )
+        if agent_type != "Critic":
+            with open(self.main_log_path, "a", 1) as f:
+                f.write(f"\n\n {agent_type} Assistant was called! \n Prompt: {user_prompt}")
 
-            # Wait until the run has looped
-            run_complete = False
-            num_tries = 100
-            while not run_complete:
-                # Check if there's an update on the run
-                run = self.client.beta.threads.runs.retrieve(
+        # Wait until the run has looped
+        run_complete = False
+        num_tries = 100
+        while not run_complete:
+            # Check if there's an update on the run
+            run = self.client.beta.threads.runs.retrieve(
+                thread_id=self.thread.id,
+                run_id=run.id
+            )
+            run_complete = run.status == "completed"
+            print("\nrun.status: ", run.status)
+
+            # Call the tools if the run status is requires action
+            if run.status == "requires_action":
+                tool_outputs = []
+                for tool_call in run.required_action.submit_tool_outputs.tool_calls:
+                    tool_id, tool_function, tool_type = tool_call.id, tool_call.function, tool_call.type
+                    print(f"Run required action: \ntool_id: {tool_id}, \ntool_function.arguments: {tool_function.arguments}, \ntool_function.name: {tool_function.name}, \ntool_type: {tool_type}")
+
+                    # Call the function directly if `tool_function` is a callable object
+                    # and `arguments` is a dictionary of arguments to pass to the function.
+                    try:
+                        arguments = json.loads(tool_function.arguments)
+                        function_output = self.available_actions[tool_function.name](**arguments)
+                    except Exception as e:
+                        function_output = f"Tool function {tool_function.name} for tool_id {tool_id} does not exist and is not callable with arguments {tool_function.arguments}. Make sure you are using only tools listed here: {self.available_actions.keys()} with the right arguments."
+
+                    tool_outputs.append({
+                        "tool_call_id": tool_id,
+                        "output": function_output
+                    })
+
+                # Submit tool outputs as a new run
+                run = self.client.beta.threads.runs.submit_tool_outputs(
                     thread_id=self.thread.id,
-                    run_id=run.id
+                    run_id=run.id,
+                    tool_outputs=tool_outputs
                 )
-                run_complete = run.status == "completed"
-                print("\nrun.status: ", run.status)
+            elif run.status == "failed":
+                print("Run failed: ", run)
+                break
 
-                # Call the tools if the run status is requires action
-                if run.status == "requires_action":
-                    tool_outputs = []
-                    for tool_call in run.required_action.submit_tool_outputs.tool_calls:
-                        tool_id, tool_function, tool_type = tool_call.id, tool_call.function, tool_call.type
-                        print(f"Run required action: \ntool_id: {tool_id}, \ntool_function.arguments: {tool_function.arguments}, \ntool_function.name: {tool_function.name}, \ntool_type: {tool_type}")
-
-                        # Call the function directly if `tool_function` is a callable object
-                        # and `arguments` is a dictionary of arguments to pass to the function.
-                        try:
-                            arguments = json.loads(tool_function.arguments)
-                            function_output = self.available_actions[tool_function.name](**arguments)
-                        except Exception as e:
-                            function_output = f"Tool function {tool_function.name} for tool_id {tool_id} does not exist and is not callable with arguments {tool_function.arguments}. Make sure you are using only tools listed here: {self.available_actions.keys()} with the right arguments."
-
-                        tool_outputs.append({
-                            "tool_call_id": tool_id,
-                            "output": function_output
-                        })
-
-                    # Submit tool outputs as a new run
-                    run = self.client.beta.threads.runs.submit_tool_outputs(
+            time.sleep(1)
+            num_tries -= 1
+            if num_tries == 0:
+                print("Run timed out, cancelling...")
+                run = self.client.beta.threads.runs.cancel(thread_id=self.thread.id, run_id=run.id)
+                while run.status != "cancelled":
+                    run = self.client.beta.threads.runs.retrieve(
                         thread_id=self.thread.id,
-                        run_id=run.id,
-                        tool_outputs=tool_outputs
+                        run_id=run.id
                     )
-                elif run.status == "failed":
-                    print("Run failed: ", run)
-                    break
-
-                time.sleep(1)
-                num_tries -= 1
-                if num_tries == 0:
-                    print("Run timed out, cancelling...")
-                    run = self.client.beta.threads.runs.cancel(thread_id=self.thread.id, run_id=run.id)
-                    while run.status != "cancelled":
-                        run = self.client.beta.threads.runs.retrieve(
-                            thread_id=self.thread.id,
-                            run_id=run.id
-                        )
-                    print("Run cancelled!")
-                    break
-            messages = self.client.beta.threads.messages.list(thread_id=self.thread.id)
-            completion = messages.data[0].content[0].text.value
-            if agent_type != "Critic":
-                with open(self.main_log_path, "a", 1) as f:
-                    f.write(f"\n\n {agent_type} Assistant Completion: {completion}")
-            return completion
+                print("Run cancelled!")
+                break
+        messages = self.client.beta.threads.messages.list(thread_id=self.thread.id)
+        completion = messages.data[0].content[0].text.value
+        if agent_type != "Critic":
+            with open(self.main_log_path, "a", 1) as f:
+                f.write(f"\n\n {agent_type} Assistant Completion: {completion}")
+        return completion
