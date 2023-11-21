@@ -250,7 +250,7 @@ class Environment:
             Give an answer in natural language paragraphs as truthfully as possible. 
             """
 
-            reflection = complete_text(prompt, model=self.model)
+            reflection = self.complete_text_openai(user_prompt=prompt)
             return f"Reflection: {reflection}\n"
         return wrapped_reflection(**kwargs)
 
