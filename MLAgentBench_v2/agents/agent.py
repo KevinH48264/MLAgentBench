@@ -21,7 +21,7 @@ The actual Child Class must implement all the abstract methods (init(), run())
 
 import time
 import json
-from MLAgentBench_v2.LLM import complete_text_openai
+# from MLAgentBench_v2.LLM import complete_text_openai
 
 # Updated base class that agents can take and fill in and iterate on
 class Agent:
@@ -33,8 +33,6 @@ class Agent:
         # States
         self.answer_states = env.answer_states
         self.max_states = env.max_states
-        self.formatted_answer_states = env.formatted_answer_states
-        self.formatted_action_history = env.formatted_action_history
 
         # Actions
         self.tool_descriptions = env.tool_descriptions
@@ -53,6 +51,32 @@ class Agent:
 
     def run(self):
         pass
+
+    # Formatting answer states for rapid experimentation
+    def formatted_answer_states(self):
+        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
+        formatted_answer_states = ""
+        for idx, answer_state in enumerate(self.answer_states):
+            formatted_answer_states += "\n\nStep: " + str(idx) 
+            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
+            formatted_answer_states += "\nAction: " + answer_state['action'] 
+            formatted_answer_states += "\nResult: " + answer_state['result'] 
+            formatted_answer_states += "\nAnswer: " + answer_state['answer_state'] 
+        return formatted_answer_states
+    
+    def formatted_action_history(self, start_idx=0):
+        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
+        formatted_answer_states = ""
+        for idx, answer_state in enumerate(self.answer_states):
+            if idx < start_idx: # Only include steps starting at start_idx
+                continue
+
+            formatted_answer_states += "\n\nStep: " + str(idx) 
+            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
+            formatted_answer_states += "\nAction: " + answer_state['action'] 
+            formatted_answer_states += "\nResult: " + answer_state['result']
+        return formatted_answer_states
+    
 
 # Function calling allows for greater control than Assistants API
 class SimpleFunctionCallingAgent(Agent):

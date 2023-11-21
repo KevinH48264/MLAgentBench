@@ -55,7 +55,7 @@ class Environment:
             task_type = args.task_type
         )
         self.files = os.listdir(self.work_dir)
-        self.max_states = 2
+        self.max_states = 8
         self.answer_states = [{
             "action": "None",
             "result": "None",
@@ -361,8 +361,11 @@ class Environment:
     # Adding code completion here so that it's easier to log
     def complete_text_openai(self, **kwargs):
         @self.log_decorator
-        def wrapped_complete_text_openai(system_prompt="You are a helpful assistant.", user_prompt="", stop_sequences=[], model=self.model, max_tokens_to_sample=2000, temperature=0.2, json_required=False, tools=None, available_functions=None, max_prompt_chars=10000, **kwargs): # 10000 chars = 2500 tokens
+        def wrapped_complete_text_openai(system_prompt="You are a helpful assistant.", user_prompt="", stop_sequences=[], model=self.model, max_tokens_to_sample=2000, temperature=0.2, json_required=False, tools=None, available_functions=None, max_prompt_tokens=2500, **kwargs): # 10000 chars = 2500 tokens
             """ Call the OpenAI API to complete a prompt."""
+            # For debugging bad request error
+            print("# of input tokens start: ", len(system_prompt + user_prompt)/4)
+
             kwargs.pop('work_dir', None) # Chat completions can't take work_dir as an arg
             raw_request = {
                 "model": model,
@@ -380,10 +383,43 @@ class Environment:
                 raw_request["tool_choice"] = "auto"
                 
             # Call the API
-            messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt[:max_prompt_chars]}]
-            response = self.client.chat.completions.create(**{"messages": messages,**raw_request})
-            completion = response.choices[0].message.content
-            tool_calls = response.choices[0].message.tool_calls
+            # To deal with rate limits, just wait
+            while True:
+                try:
+                    print("# of input tokens before calling api: ", len(system_prompt + user_prompt[:max_prompt_tokens * 4])/4)
+                    messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt[:max_prompt_tokens * 4]}]
+                    response = self.client.chat.completions.create(**{"messages": messages,**raw_request})
+                    completion = response.choices[0].message.content
+                    tool_calls = response.choices[0].message.tool_calls
+                except openai.error.RateLimitError:
+                    print("   *** The OpenAI API rate limit has been exceeded. Waiting 10 seconds and trying again. ***")
+                    time.sleep(10)  # Wait 10 seconds and try again
+                except openai.error.Timeout:
+                    print("   *** OpenAI API timeout occurred. Waiting 10 seconds and trying again. ***")
+                    time.sleep(10)  # Wait 10 seconds and try again
+                except openai.error.APIError:
+                    print("   *** OpenAI API error occurred. Waiting 10 seconds and trying again. ***")
+                    time.sleep(10)  # Wait 10 seconds and try again
+                except openai.error.APIConnectionError:
+                    print("   *** OpenAI API connection error occurred. Check your network settings, proxy configuration, SSL certificates, or firewall rules. Waiting 10 seconds and trying again. ***")
+                    time.sleep(10)  # Wait 10 seconds and try again
+                except openai.error.InvalidRequestError:
+                    print("   *** OpenAI API invalid request. Check the documentation for the specific API method you are calling and make sure you are sending valid and complete parameters. Waiting 10 seconds and trying again. ***")
+                    time.sleep(10)  # Wait 10 seconds and try again
+                except openai.error.ServiceUnavailableError:
+                    print("   *** OpenAI API service unavailable. Waiting 10 seconds and trying again. ***")
+                    time.sleep(10)  # Wait 10 seconds and try again
+                except openai.error.BadRequestError:
+                    print(f"   *** OpenAI API service bad request. Halving current max prompt tokens: {max_prompt_tokens}. Waiting 10 seconds and trying again. ***")
+                    max_prompt_tokens /= 2
+                    time.sleep(1)  # Wait 10 seconds and try again
+
+                    if max_prompt_tokens < 10: # System prompt was likely too long
+                        print("Max prompt tokens is less than 10. System prompt is likely too long. System prompt length: ", len(system_prompt))
+                        break
+                else:
+                    break
+            print("# of input tokens after: ", len(system_prompt + user_prompt[:max_prompt_tokens * 4])/4)
 
             # Ensure that the completion is JSON parsable. If it isn't, ask GPT to make it JSON parsable by increasing max tokens
             if json_required and (model == "gpt-3.5-turbo-1106" or model == "gpt-4-1106-preview"):
@@ -495,28 +531,3 @@ class Environment:
             return False, final_answer_evaluation
         
         return False, None
-    
-    def formatted_answer_states(self):
-        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
-        formatted_answer_states = ""
-        for idx, answer_state in enumerate(self.answer_states):
-            formatted_answer_states += "\n\nStep: " + str(idx) 
-            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
-            formatted_answer_states += "\nAction: " + answer_state['action'] 
-            formatted_answer_states += "\nResult: " + answer_state['result'] 
-            formatted_answer_states += "\nAnswer: " + answer_state['answer_state'] 
-        return formatted_answer_states
-    
-    def formatted_action_history(self, start_idx=0):
-        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
-        formatted_answer_states = ""
-        for idx, answer_state in enumerate(self.answer_states):
-            if idx < start_idx: # Only include steps starting at start_idx
-                continue
-
-            formatted_answer_states += "\n\nStep: " + str(idx) 
-            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
-            formatted_answer_states += "\nAction: " + answer_state['action'] 
-            formatted_answer_states += "\nResult: " + answer_state['result']
-        return formatted_answer_states
-    
