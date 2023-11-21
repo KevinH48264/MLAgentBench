@@ -27,7 +27,7 @@ import functools
 from openai import OpenAI
 import openai
 from dotenv import load_dotenv
-from .LLM import complete_text_fast, complete_text_openai, complete_text
+from .LLM import complete_text_fast, complete_text
 load_dotenv()
 
 import MLAgentBench_v2.high_level_actions as high_level_actions
@@ -96,6 +96,8 @@ class Environment:
         openai.api_key = os.getenv("OPENAI_API_KEY")
         self.client = OpenAI(api_key=openai.api_key)
         self.model = args.llm_name
+        self.MAX_PROMPT_TOKENS = 4000
+        self.MAX_TOKENS_TO_SAMPLE = 2000
 
         # Set up logging, overwrite existing logs if they exist
         self._log_dir = args.log_dir
@@ -131,7 +133,7 @@ class Environment:
 
             # Update research log
             try:
-                print(f"\nStep: {self.num_steps}\nCalling function {func.__name__}(args = {args}, kwargs = {kwargs})\n")
+                print(f"\n\n--- LOGGING NEW ACTION ---\nStep: {self.num_steps}\nCalling function {func.__name__}(args = {args}, kwargs = {kwargs})\n")
 
                 # Perform the actual function
                 result = func(*args, **kwargs)
@@ -156,7 +158,6 @@ class Environment:
             except Exception as e:
                 result = f"EnvError: Error executing {func.__name__}."
                 print("--- TOOL ERROR ---", e)
-            print("Finished!")
 
             # Copy work_dir if it exists
             if self.work_dir and os.path.exists(self.work_dir):
@@ -165,7 +166,7 @@ class Environment:
 
             # Update states
             self.num_steps += 1
-            kwargs['work_dir'] = "." # replace work_dir for the agent to stay in its workspace
+            kwargs['work_dir'] = "." # replace work_dir for the agent to stay in its workspace when it reads the answer states
             self.update_states(action=f"Calling function {func.__name__}(args = {args}, kwargs = {kwargs})", result=result)
             
             # Log most recent state
@@ -191,7 +192,7 @@ class Environment:
         Research Problem: ...
         Current Files: ...
         Tools / functions: ...
-        Most recent files, action, result, and answer states (oldest to newest): ...
+        Most recent files, action, result, and answer states (newest to oldest): ...
 
         You should then respond to me with your best answer given the new action and result taken, problems that still exist if you haven't solved the research problem, and a plan to solve those problems.
         '''
@@ -199,18 +200,30 @@ class Environment:
         user_prompt = f'''Research Problem: {self.research_problem}
         Current Files: {self.files}
         Tools / functions: {list(self.available_actions.keys())}
-        Most recent files, action, result, and answer states (oldest to newest): {self.answer_states}  
+        Most recent files, action, result, and answer states (newest to oldest): {self.answer_states}  
 '''
-        new_answer_state = complete_text_openai(prompt=user_prompt, system_prompt=system_prompt, model=self.model, log_file=self.main_log_path)
 
-        self.answer_states.append({
-            "action": action,
+        # Raw Chat Completion API to avoid logging loop
+        user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] # Ensure that the user prompt is not too long
+        raw_request = {
+            "model": self.model,
+            "temperature": 0,
+            "max_tokens": self.MAX_TOKENS_TO_SAMPLE,
+            "stop": None,  # API doesn't like empty list
+        }
+        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+        response = self.client.chat.completions.create(**{"messages": messages, **raw_request})
+        new_answer_state = response.choices[0].message.content
+
+        # Update answer state to have newest action and result to oldest
+        self.answer_states.insert(0, {
+            "action": action[:self.MAX_PROMPT_TOKENS * 4], # Chat completion will automatically truncate
             "result": result,
             "answer_state": new_answer_state,
             "files": self.files,
         })
         while len(self.answer_states) > self.max_states:
-            self.answer_states.pop(0)
+            self.answer_states.pop()
 
     ############## for actions ##############
     
@@ -361,11 +374,12 @@ class Environment:
     # Adding code completion here so that it's easier to log
     def complete_text_openai(self, **kwargs):
         @self.log_decorator
-        def wrapped_complete_text_openai(system_prompt="You are a helpful assistant.", user_prompt="", stop_sequences=[], model=self.model, max_tokens_to_sample=2000, temperature=0.2, json_required=False, tools=None, available_functions=None, max_prompt_tokens=2500, **kwargs): # 10000 chars = 2500 tokens
+        def wrapped_complete_text_openai(system_prompt="You are a helpful assistant.", user_prompt="", stop_sequences=[], model=self.model, max_tokens_to_sample=2000, temperature=0.2, json_required=False, tools=None, available_functions=None, max_prompt_tokens=self.MAX_PROMPT_TOKENS, **kwargs):
             """ Call the OpenAI API to complete a prompt."""
-            # For debugging bad request error
-            print("# of input tokens start: ", len(system_prompt + user_prompt)/4)
-
+            # For debugging
+            print("Truncated user prompt: ", user_prompt[:max_prompt_tokens * 4])
+            print("# of input tokens start: ", len(system_prompt + user_prompt) // 4)
+            user_prompt = user_prompt[:max_prompt_tokens * 4] # Ensure that the user prompt is not too long
             kwargs.pop('work_dir', None) # Chat completions can't take work_dir as an arg
             raw_request = {
                 "model": model,
@@ -378,48 +392,16 @@ class Environment:
             # Add additional parameters if necessary (JSON or function calling)
             if json_required and (model == "gpt-3.5-turbo-1106" or model == "gpt-4-1106-preview"):
                 raw_request["response_format"] = {"type": "json_object"}
+                user_prompt += '\nEnsure the response can be parsed by Python "json.loads", e.g.: no trailing commas, no single quotes, etc. This is important.'
             if tools and available_functions:
                 raw_request["tools"] = tools
                 raw_request["tool_choice"] = "auto"
                 
             # Call the API
-            # To deal with rate limits, just wait
-            while True:
-                try:
-                    print("# of input tokens before calling api: ", len(system_prompt + user_prompt[:max_prompt_tokens * 4])/4)
-                    messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt[:max_prompt_tokens * 4]}]
-                    response = self.client.chat.completions.create(**{"messages": messages,**raw_request})
-                    completion = response.choices[0].message.content
-                    tool_calls = response.choices[0].message.tool_calls
-                except openai.error.RateLimitError:
-                    print("   *** The OpenAI API rate limit has been exceeded. Waiting 10 seconds and trying again. ***")
-                    time.sleep(10)  # Wait 10 seconds and try again
-                except openai.error.Timeout:
-                    print("   *** OpenAI API timeout occurred. Waiting 10 seconds and trying again. ***")
-                    time.sleep(10)  # Wait 10 seconds and try again
-                except openai.error.APIError:
-                    print("   *** OpenAI API error occurred. Waiting 10 seconds and trying again. ***")
-                    time.sleep(10)  # Wait 10 seconds and try again
-                except openai.error.APIConnectionError:
-                    print("   *** OpenAI API connection error occurred. Check your network settings, proxy configuration, SSL certificates, or firewall rules. Waiting 10 seconds and trying again. ***")
-                    time.sleep(10)  # Wait 10 seconds and try again
-                except openai.error.InvalidRequestError:
-                    print("   *** OpenAI API invalid request. Check the documentation for the specific API method you are calling and make sure you are sending valid and complete parameters. Waiting 10 seconds and trying again. ***")
-                    time.sleep(10)  # Wait 10 seconds and try again
-                except openai.error.ServiceUnavailableError:
-                    print("   *** OpenAI API service unavailable. Waiting 10 seconds and trying again. ***")
-                    time.sleep(10)  # Wait 10 seconds and try again
-                except openai.error.BadRequestError:
-                    print(f"   *** OpenAI API service bad request. Halving current max prompt tokens: {max_prompt_tokens}. Waiting 10 seconds and trying again. ***")
-                    max_prompt_tokens /= 2
-                    time.sleep(1)  # Wait 10 seconds and try again
-
-                    if max_prompt_tokens < 10: # System prompt was likely too long
-                        print("Max prompt tokens is less than 10. System prompt is likely too long. System prompt length: ", len(system_prompt))
-                        break
-                else:
-                    break
-            print("# of input tokens after: ", len(system_prompt + user_prompt[:max_prompt_tokens * 4])/4)
+            messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+            response = self.client.chat.completions.create(**{"messages": messages,**raw_request})
+            completion = response.choices[0].message.content
+            tool_calls = response.choices[0].message.tool_calls
 
             # Ensure that the completion is JSON parsable. If it isn't, ask GPT to make it JSON parsable by increasing max tokens
             if json_required and (model == "gpt-3.5-turbo-1106" or model == "gpt-4-1106-preview"):
@@ -449,9 +431,95 @@ class Environment:
                         }
                     )
                 return "Function calling complete! Action and result should be saved to answer state."
-
+            
             return completion
         return wrapped_complete_text_openai(**kwargs)
+    
+    # Function to run the OpenAI Assistants API
+    def run_assistant(self, system_prompt, user_prompt):
+        # For debugging
+        print("Assistants Truncated user prompt: ", user_prompt[:self.MAX_PROMPT_TOKENS * 4])
+        print("# of input tokens start: ", len(system_prompt + user_prompt) // 4)
+        user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] # Ensure that the user prompt is not too long
+
+        # Instantiate an Assistant
+        self.assistant = self.client.beta.assistants.create(
+            name="Research Agent",
+            instructions=system_prompt,
+            tools=self.tool_descriptions,
+            model=self.model
+        )
+        self.thread = self.client.beta.threads.create()
+
+        # Invoke the Assistants API to answer
+        self.client.beta.threads.messages.create(
+            thread_id=self.thread.id,
+            role="user",
+            content=user_prompt
+        )
+        run = self.client.beta.threads.runs.create(
+            thread_id=self.thread.id,
+            assistant_id=self.assistant.id,
+        )
+
+        # Wait until the run has looped
+        run_complete = False
+        num_tries = 100
+        while not run_complete:
+            # Check if there's an update on the run
+            run = self.client.beta.threads.runs.retrieve(
+                thread_id=self.thread.id,
+                run_id=run.id
+            )
+            run_complete = run.status == "completed"
+            print("\nrun.status: ", run.status)
+
+            # Call the tools if the run status is requires action
+            if run.status == "requires_action":
+                tool_outputs = []
+                for tool_call in run.required_action.submit_tool_outputs.tool_calls:
+                    tool_id, tool_function, tool_type = tool_call.id, tool_call.function, tool_call.type
+                    print(f"Run required action: \ntool_id: {tool_id}, \ntool_function.arguments: {tool_function.arguments}, \ntool_function.name: {tool_function.name}, \ntool_type: {tool_type}")
+
+                    # Call the function directly if `tool_function` is a callable object
+                    # and `arguments` is a dictionary of arguments to pass to the function.
+                    try:
+                        arguments = json.loads(tool_function.arguments)
+                        function_output = self.available_actions[tool_function.name](**arguments)
+                    except Exception as e:
+                        function_output = f"Tool function {tool_function.name} for tool_id {tool_id} does not exist and is not callable with arguments {tool_function.arguments}. Make sure you are using only tools listed here: {self.available_actions.keys()} with the right arguments."
+
+                    tool_outputs.append({
+                        "tool_call_id": tool_id,
+                        "output": function_output
+                    })
+
+                # Submit tool outputs as a new run
+                run = self.client.beta.threads.runs.submit_tool_outputs(
+                    thread_id=self.thread.id,
+                    run_id=run.id,
+                    tool_outputs=tool_outputs
+                )
+            elif run.status == "failed":
+                print("Run failed: ", run)
+                completion = "Assistants API call run failed. Please try again."
+                break
+
+            time.sleep(1)
+            num_tries -= 1
+            if num_tries == 0:
+                print("Run timed out, cancelling...")
+                run = self.client.beta.threads.runs.cancel(thread_id=self.thread.id, run_id=run.id)
+                while run.status != "cancelled":
+                    run = self.client.beta.threads.runs.retrieve(
+                        thread_id=self.thread.id,
+                        run_id=run.id
+                    )
+                print("Run cancelled!")
+                break
+        messages = self.client.beta.threads.messages.list(thread_id=self.thread.id)
+        completion = messages.data[0].content[0].text.value
+        return completion
 
     ############################## internal functions ########################################
 
@@ -531,3 +599,25 @@ class Environment:
             return False, final_answer_evaluation
         
         return False, None
+    
+    # Formatting answer states for rapid experimentation
+    def formatted_answer_states(self):
+        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
+        formatted_answer_states = ""
+        for idx, answer_state in enumerate(self.answer_states):
+            formatted_answer_states += "\nStep: " + str(len(self.answer_states) - 1 - idx) 
+            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
+            formatted_answer_states += "\nAction: " + answer_state['action'] 
+            formatted_answer_states += "\nResult: " + answer_state['result'] 
+            formatted_answer_states += "\nAnswer: " + answer_state['answer_state'] 
+        return formatted_answer_states
+    
+    def formatted_action_history(self):
+        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
+        formatted_answer_states = ""
+        for idx, answer_state in enumerate(self.answer_states):
+            formatted_answer_states += "\nStep: " + str(len(self.answer_states) - 1 - idx) 
+            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
+            formatted_answer_states += "\nAction: " + answer_state['action'] 
+            formatted_answer_states += "\nResult: " + answer_state['result']
+        return formatted_answer_states

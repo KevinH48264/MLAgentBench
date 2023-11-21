@@ -34,7 +34,7 @@ def gen_eureka(
                 critique,
                 skills
             ) # if the agent thinks that it can't do it with the existing actions, then it should generate subtasks (task decomposition)
-            execution_feedback, execution_errors = execution_agent.function_call(methods_prompt) # TODO: handle execution errors to route back
+            execution_feedback = execution_agent.function_call(methods_prompt) # TODO: handle execution errors to route back
             success, critique = critic_agent.check_task_success(
                 task, execution_feedback
             ) # The critic can check 1) is the method sound and 2) does the execution feedback actually answer the task / question

@@ -40,6 +40,7 @@ class Agent:
         self.client = env.client
         self.model = env.model
         self.complete_text_openai = env.complete_text_openai
+        self.run_assistant = env.run_assistant
 
         self.work_dir = env.work_dir
         self.files = env.files
@@ -49,33 +50,12 @@ class Agent:
         self.main_log_path = env.main_log_path
         # self.num_steps = env.num_steps
 
+        # Formatting answer states for rapid experimentation and clearer prompts
+        self.formatted_answer_states = env.formatted_answer_states
+        self.formatted_action_history = env.formatted_action_history
+
     def run(self):
         pass
-
-    # Formatting answer states for rapid experimentation
-    def formatted_answer_states(self):
-        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
-        formatted_answer_states = ""
-        for idx, answer_state in enumerate(self.answer_states):
-            formatted_answer_states += "\n\nStep: " + str(idx) 
-            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
-            formatted_answer_states += "\nAction: " + answer_state['action'] 
-            formatted_answer_states += "\nResult: " + answer_state['result'] 
-            formatted_answer_states += "\nAnswer: " + answer_state['answer_state'] 
-        return formatted_answer_states
-    
-    def formatted_action_history(self, start_idx=0):
-        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
-        formatted_answer_states = ""
-        for idx, answer_state in enumerate(self.answer_states):
-            if idx < start_idx: # Only include steps starting at start_idx
-                continue
-
-            formatted_answer_states += "\n\nStep: " + str(idx) 
-            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
-            formatted_answer_states += "\nAction: " + answer_state['action'] 
-            formatted_answer_states += "\nResult: " + answer_state['result']
-        return formatted_answer_states
     
 
 # Function calling allows for greater control than Assistants API
