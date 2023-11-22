@@ -96,7 +96,7 @@ class SimpleFunctionCallingAgent(Agent):
                 log_file.write("\n")
 
             # FUNCTION CALLING AGENT: Call the function calling API by giving tools and available functions
-            completion = complete_text_openai(self.initial_prompt, system_prompt=self.system_prompt, model=self.model, tools=self.tool_descriptions, available_functions=self.available_actions)
+            completion = self.complete_text_openai(system_prompt=self.system_prompt, user_prompt=self.initial_prompt, model=self.model, tools=self.tool_descriptions, available_functions=self.available_actions)
 
             # Log completion
             with open(self.main_log_path, "a", 1) as log_file:
