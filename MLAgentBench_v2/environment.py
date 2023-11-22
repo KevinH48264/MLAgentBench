@@ -171,7 +171,7 @@ class Environment:
             
             # Log most recent state
             with open(self.main_log_path, "a", 1) as log_file:
-                log_file.write(f"\nStep: {self.num_steps}\n{json.dumps(self.answer_states[-1], indent=4)}\n")
+                log_file.write(f"\nStep: {self.num_steps}\n{json.dumps(self.answer_states[0], indent=4)}\n")
 
             return result
         return wrapper
@@ -204,7 +204,13 @@ class Environment:
 '''
 
         # Raw Chat Completion API to avoid logging loop
-        user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] # Ensure that the user prompt is not too long
+
+        # Truncate user prompt if too long and add a note
+        if len(user_prompt) // 4 > self.MAX_PROMPT_TOKENS:
+            user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] + f"... The full prompt was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
+            with open(self.main_log_path, "a", 1) as log_file:
+                log_file.write(f"\n(update_states) Truncated user prompt: {user_prompt}\n")
+
         raw_request = {
             "model": self.model,
             "temperature": 0,
@@ -217,7 +223,7 @@ class Environment:
 
         # Update answer state to have newest action and result to oldest
         self.answer_states.insert(0, {
-            "action": action[:self.MAX_PROMPT_TOKENS * 4], # Chat completion will automatically truncate
+            "action": action[:self.MAX_PROMPT_TOKENS * 4], # Chat completion will automatically truncate # TODO: can't figure out what to do with this because unsure if this is an answer state that is updated by curriculum agent or a files_action_result_history memory
             "result": result,
             "answer_state": new_answer_state,
             "files": self.files,
@@ -266,7 +272,7 @@ class Environment:
             assert("workspace" in self.work_dir and "branch" in self.work_dir) # we should only list files in the workspace and branch
             try:
                 observation = open(os.path.join(work_dir, file_name)).read()
-                return observation[:max_char_read]
+                return observation # Removed truncation because Assistants API and Chat Completions should handle truncation
             except:
                 raise EnvException(f"cannot read file {file_name}")
         return wrapped_read_file(max_char_read = 2000, **kwargs)
@@ -275,6 +281,11 @@ class Environment:
         @self.log_decorator
         def wrapped_write_file(file_name='', content='', **kwargs):
             try:
+                # Original files should be read only
+                read_only_directory = self.work_dir.split("_branch_")[0]
+                if os.path.isfile(os.path.join(read_only_directory, file_name)):
+                    raise EnvException(f"File {file_name} is given and read only. Please try again with a different file name.")
+
                 # Extract the directory path from the full file path and create directory if necessary
                 directory = os.path.dirname(os.path.join(self.work_dir, file_name))
                 if not os.path.exists(directory):
@@ -376,10 +387,14 @@ class Environment:
         @self.log_decorator
         def wrapped_complete_text_openai(system_prompt="You are a helpful assistant.", user_prompt="", stop_sequences=[], model=self.model, max_tokens_to_sample=2000, temperature=0.2, json_required=False, tools=None, available_functions=None, max_prompt_tokens=self.MAX_PROMPT_TOKENS, **kwargs):
             """ Call the OpenAI API to complete a prompt."""
-            # For debugging
-            print("Truncated user prompt: ", user_prompt[:max_prompt_tokens * 4])
-            print("# of input tokens start: ", len(system_prompt + user_prompt) // 4)
-            user_prompt = user_prompt[:max_prompt_tokens * 4] # Ensure that the user prompt is not too long
+            # Truncate user prompt if too long and add a note
+            if len(user_prompt) // 4 > self.MAX_PROMPT_TOKENS:
+                user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] + f"... The full prompt was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
+                with open(self.main_log_path, "a", 1) as log_file:
+                    log_file.write(f"\n(complete_text_openai) Truncated user prompt: {user_prompt}\n")
+                print("Truncated user prompt: ", user_prompt)
+                print("# of input tokens start: ", len(system_prompt + user_prompt) // 4)
+            
             kwargs.pop('work_dir', None) # Chat completions can't take work_dir as an arg
             raw_request = {
                 "model": model,
@@ -437,10 +452,15 @@ class Environment:
     
     # Function to run the OpenAI Assistants API
     def run_assistant(self, system_prompt, user_prompt):
-        # For debugging
-        print("Assistants Truncated user prompt: ", user_prompt[:self.MAX_PROMPT_TOKENS * 4])
-        print("# of input tokens start: ", len(system_prompt + user_prompt) // 4)
-        user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] # Ensure that the user prompt is not too long
+        # Truncate user prompt if too long and add a note
+        if len(user_prompt) // 4 > self.MAX_PROMPT_TOKENS:
+            user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4]
+            user_prompt += f"... The full prompt was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
+            with open(self.main_log_path, "a", 1) as log_file:
+                log_file.write(f"\n(run_assistant) Truncated user prompt: {user_prompt}\n")
+            print("Assistants Truncated user prompt: ", user_prompt)
+            print("# of input tokens start: ", len(system_prompt + user_prompt) // 4)
+            
 
         # Instantiate an Assistant
         self.assistant = self.client.beta.assistants.create(
