@@ -54,7 +54,7 @@ class Environment:
             task_name = args.task, 
             task_type = args.task_type
         )
-        self.files = os.listdir(self.work_dir)
+        self.files = [os.path.relpath(os.path.join(root, file), self.work_dir) for root, dirs, files in os.walk(self.work_dir) for file in files] # Include skill library files for now
         self.max_states = 8
         self.answer_states = [{
             "action": "None",
@@ -127,7 +127,7 @@ class Environment:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # Update files
-            self.files = os.listdir(self.work_dir)
+            self.files = [os.path.relpath(os.path.join(root, file), self.work_dir) for root, dirs, files in os.walk(self.work_dir) for file in files] # Include skill library files for now
             kwargs['work_dir'] = self.work_dir # Update to actual work_dir
             assert(kwargs['work_dir'] == self.work_dir) # Ensure that the work_dir sent into any function is the work directory and nothing else
 
@@ -149,7 +149,7 @@ class Environment:
                 result = "EnvError: " + e.message
                 print("--- TOOL ERROR ---", e)
             except TypeError as e:
-                invalid_action_error = f"The arguments needs to have proper entries. You may have missed some entries or used inappropriate ones. Please use the correct format and try again:\n{self.tool_descriptions}"
+                invalid_action_error = f"The arguments needs to have proper entries. You may have missed some entries or used inappropriate ones. Please use the correct format and try again."
                 result = "EnvError: " + invalid_action_error
                 print("--- TOOL ERROR ---", e)
             # except TimeoutException as e:
@@ -184,30 +184,29 @@ class Environment:
         """
 
         # Update files
-        self.files = os.listdir(self.work_dir)
+        self.files = [os.path.relpath(os.path.join(root, file), self.work_dir) for root, dirs, files in os.walk(self.work_dir) for file in files] # Include skill library files for now
 
         system_prompt = '''You are a helpful assistant. Given a research problem, your goal is to improve the answer.
-        
-        You will be given this information:
-        Research Problem: ...
-        Current Files: ...
-        Tools / functions: ...
-        Most recent files, action, result, and answer states (newest to oldest): ...
 
-        You should then respond to me with your best answer given the new action and result taken, problems that still exist if you haven't solved the research problem, and a plan to solve those problems.
-        '''
+You will be given this information:
+Research Problem: ...
+Current Files: ...
+Tools / functions: ...
+Most recent files, action, result, and answer states (newest to oldest): ...
+
+You should then respond to me with your best answer given the new action and result taken, problems that still exist if you haven't solved the research problem, and a plan to solve those problems.
+'''
 
         user_prompt = f'''Research Problem: {self.research_problem}
-        Current Files: {self.files}
-        Tools / functions: {list(self.available_actions.keys())}
-        Most recent files, action, result, and answer states (newest to oldest): {self.answer_states}  
+Current Files: {self.files}
+Tools / functions: {list(self.available_actions.keys())}
+Most recent files, action, result, and answer states (newest to oldest): {self.answer_states}  
 '''
 
         # Raw Chat Completion API to avoid logging loop
-
         # Truncate user prompt if too long and add a note
-        if len(user_prompt) // 4 > self.MAX_PROMPT_TOKENS:
-            user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] + f"... The full prompt was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
+        if len(user_prompt) > self.MAX_PROMPT_TOKENS * 4:
+            user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] + f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
             with open(self.main_log_path, "a", 1) as log_file:
                 log_file.write(f"\n(update_states) Truncated user prompt: {user_prompt}\n")
 
@@ -272,17 +271,19 @@ class Environment:
             assert("workspace" in self.work_dir and "branch" in self.work_dir) # we should only list files in the workspace and branch
             try:
                 observation = open(os.path.join(work_dir, file_name)).read()
-                return observation # Removed truncation because Assistants API and Chat Completions should handle truncation
+                if len(observation) > self.MAX_PROMPT_TOKENS * 4: # Auto-truncate if too long
+                    observation = observation[:self.MAX_PROMPT_TOKENS * 4] + f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
+                return observation
             except:
                 raise EnvException(f"cannot read file {file_name}")
-        return wrapped_read_file(max_char_read = 2000, **kwargs)
+        return wrapped_read_file(**kwargs)
 
     def write_file(self, **kwargs):
         @self.log_decorator
         def wrapped_write_file(file_name='', content='', **kwargs):
             try:
                 # Original files should be read only
-                read_only_directory = self.work_dir.split("_branch_")[0]
+                read_only_directory = self.work_dir.split("_branch")[0]
                 if os.path.isfile(os.path.join(read_only_directory, file_name)):
                     raise EnvException(f"File {file_name} is given and read only. Please try again with a different file name.")
 
@@ -388,8 +389,8 @@ class Environment:
         def wrapped_complete_text_openai(system_prompt="You are a helpful assistant.", user_prompt="", stop_sequences=[], model=self.model, max_tokens_to_sample=2000, temperature=0.2, json_required=False, tools=None, available_functions=None, max_prompt_tokens=self.MAX_PROMPT_TOKENS, **kwargs):
             """ Call the OpenAI API to complete a prompt."""
             # Truncate user prompt if too long and add a note
-            if len(user_prompt) // 4 > self.MAX_PROMPT_TOKENS:
-                user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] + f"... The full prompt was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
+            if len(user_prompt) > self.MAX_PROMPT_TOKENS * 4:
+                user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] + f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
                 with open(self.main_log_path, "a", 1) as log_file:
                     log_file.write(f"\n(complete_text_openai) Truncated user prompt: {user_prompt}\n")
                 print("Truncated user prompt: ", user_prompt)
@@ -451,22 +452,25 @@ class Environment:
         return wrapped_complete_text_openai(**kwargs)
     
     # Function to run the OpenAI Assistants API
-    def run_assistant(self, system_prompt, user_prompt):
+    def run_assistant(self, system_prompt, user_prompt, tool_descriptions=None):
         # Truncate user prompt if too long and add a note
-        if len(user_prompt) // 4 > self.MAX_PROMPT_TOKENS:
+        if len(user_prompt) > self.MAX_PROMPT_TOKENS * 4:
             user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4]
-            user_prompt += f"... The full prompt was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
+            user_prompt += f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
             with open(self.main_log_path, "a", 1) as log_file:
                 log_file.write(f"\n(run_assistant) Truncated user prompt: {user_prompt}\n")
             print("Assistants Truncated user prompt: ", user_prompt)
             print("# of input tokens start: ", len(system_prompt + user_prompt) // 4)
             
+        # Default tool_descriptions is the initialized one
+        if tool_descriptions is None:
+            tool_descriptions = self.tool_descriptions
 
         # Instantiate an Assistant
         self.assistant = self.client.beta.assistants.create(
             name="Research Agent",
             instructions=system_prompt,
-            tools=self.tool_descriptions,
+            tools=tool_descriptions,
             model=self.model
         )
         self.thread = self.client.beta.threads.create()

@@ -50,9 +50,29 @@ class Agent:
         self.main_log_path = env.main_log_path
         # self.num_steps = env.num_steps
 
+        # Misc
         # Formatting answer states for rapid experimentation and clearer prompts
         self.formatted_answer_states = env.formatted_answer_states
         self.formatted_action_history = env.formatted_action_history
+
+        # Read tool description for only read action. Maybe put it in env?
+        self.read_tool_description = [{
+            "type": "function",
+            "function": {
+                "name": "readFile",
+                "description": "Use this to read an existing file.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_name": {
+                            "type": "string",
+                            "description": "A valid file name with relative path to current directory if needed"
+                        }
+                    },
+                    "required": ["file_name"]
+                }
+            }
+        }]
 
     def run(self):
         pass
@@ -96,7 +116,7 @@ class SimpleFunctionCallingAgent(Agent):
                 log_file.write("\n")
 
             # FUNCTION CALLING AGENT: Call the function calling API by giving tools and available functions
-            completion = complete_text_openai(self.initial_prompt, system_prompt=self.system_prompt, model=self.model, tools=self.tool_descriptions, available_functions=self.available_actions)
+            completion = self.complete_text_openai(system_prompt=self.system_prompt, user_prompt=self.initial_prompt, model=self.model, tools=self.tool_descriptions, available_functions=self.available_actions)
 
             # Log completion
             with open(self.main_log_path, "a", 1) as log_file:
