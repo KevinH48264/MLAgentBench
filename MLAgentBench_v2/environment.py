@@ -56,12 +56,19 @@ class Environment:
         )
         self.files = [os.path.relpath(os.path.join(root, file), self.work_dir) for root, dirs, files in os.walk(self.work_dir) for file in files] # Include skill library files for now
         self.max_states = 8
+        self.max_history = 8
         self.answer_states = [{
+            "attempted_task": "None",
+            "plan": "None",
+            "result": "None",
+            "files": self.files,
+            "answer_state": "None"
+        }] # State representation: s_t * self.max_states
+        self.files_action_result_history = [{
             "action": "None",
             "result": "None",
-            "answer_state": "None",
             "files": self.files,
-        }] # s_t = [(s_t-5, answer_state, files)..., (s_t-2, answer_state, files), (s_t-1, answer_state, files), (s_t, answer_state, files)]. # potentially, we can add a research_log of steps that were taken to achieve a state and help guide future steps to be taken, like a MCTS
+        }] 
 
         # Set up actions
         self._tool_descriptions = TOOL_DESCRIPTIONS # Formatted for OpenAI function calling
@@ -167,17 +174,25 @@ class Environment:
             # Update states
             self.num_steps += 1
             kwargs['work_dir'] = "." # replace work_dir for the agent to stay in its workspace when it reads the answer states
-            self.update_states(action=f"Calling function {func.__name__}(args = {args}, kwargs = {kwargs})", result=result)
+
+            # Update history to have newest action and result to oldest
+            self.files_action_result_history.insert(0, {
+                "files": self.files,
+                "action": f"Calling function {func.__name__}(args = {args}, kwargs = {kwargs})"[:self.MAX_PROMPT_TOKENS * 4], # Chat completion will automatically truncate when history is added
+                "result": result,
+            })
+            while len(self.files_action_result_history) > self.max_history:
+                self.files_action_result_history.pop()
             
             # Log most recent state
             with open(self.main_log_path, "a", 1) as log_file:
-                log_file.write(f"\nStep: {self.num_steps}\n{json.dumps(self.answer_states[0], indent=4)}\n")
-
+                log_file.write(f"\nStep: {self.num_steps}\n{json.dumps(self.files_action_result_history[0], indent=4)}\n")
             return result
         return wrapper
     
-    def update_states(self, action, result):
-        """Update the states of the agent based on action and result. 
+    # Update answer state
+    def update_answer_state(self, attempted_task, plan, result):
+        """Update the states of the agent based on attempted_task, plan, result, and files.
         TODO: Extra 1: Break up the state into 1) problem 2) current best answer 3) metric 4) problem to solve 5) next step / plan to solve the problem -- some kind of structure like that.
 
         TODO: If you don't use Assistants API, then you can have one action at a time and then the update state should only use the current action, result, and state to be the new state instead of the entire history. 2) Then you should have a MCTS to plan what is the next move. Or the updated state should just say what is missing, and not say how to fix it.
@@ -186,21 +201,28 @@ class Environment:
         # Update files
         self.files = [os.path.relpath(os.path.join(root, file), self.work_dir) for root, dirs, files in os.walk(self.work_dir) for file in files] # Include skill library files for now
 
-        system_prompt = '''You are a helpful assistant. Given a research problem, your goal is to improve the answer.
+        system_prompt = '''You are a helpful assistant. Given a research goal, your goal is to improve the answer.
 
 You will be given this information:
-Research Problem: ...
-Current Files: ...
+Research Goal: ...
 Tools / functions: ...
-Most recent files, action, result, and answer states (newest to oldest): ...
+Attempted Task: Task to accomplish to better achieve the research goal
+Plan: Plan to accomplish the task
+Result: Evaluation after executing plan
+Files: Files after executing plan
+Most recent attempted tasks, plans, results, files, and answer states (newest to oldest): ...
 
-You should then respond to me with your best answer given the new action and result taken, problems that still exist if you haven't solved the research problem, and a plan to solve those problems.
+You should then respond to me with 1) your best answer given the new attempted task, plan, result, and files, 2) problems that still exist if you haven't solved the research problem, and 3) a plan containing approaches to potentially solve those problems.
 '''
 
-        user_prompt = f'''Research Problem: {self.research_problem}
-Current Files: {self.files}
+        user_prompt = f'''Research Goal: {self.research_problem}
 Tools / functions: {list(self.available_actions.keys())}
-Most recent files, action, result, and answer states (newest to oldest): {self.answer_states}  
+Attempted Task: {attempted_task}
+Plan: {plan}
+Result: {result}
+Files: {self.files}
+Most recent attempted tasks, plans, results, files, and answer states (newest to oldest): 
+{self.formatted_answer_states()}
 '''
 
         # Raw Chat Completion API to avoid logging loop
@@ -208,7 +230,7 @@ Most recent files, action, result, and answer states (newest to oldest): {self.a
         if len(user_prompt) > self.MAX_PROMPT_TOKENS * 4:
             user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] + f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
             with open(self.main_log_path, "a", 1) as log_file:
-                log_file.write(f"\n(update_states) Truncated user prompt: {user_prompt}\n")
+                log_file.write(f"\n(update_answer_states) Truncated user prompt: {user_prompt}\n")
 
         raw_request = {
             "model": self.model,
@@ -222,11 +244,13 @@ Most recent files, action, result, and answer states (newest to oldest): {self.a
 
         # Update answer state to have newest action and result to oldest
         self.answer_states.insert(0, {
-            "action": action[:self.MAX_PROMPT_TOKENS * 4], # Chat completion will automatically truncate # TODO: can't figure out what to do with this because unsure if this is an answer state that is updated by curriculum agent or a files_action_result_history memory
+            "attempted_task": attempted_task,
+            "plan": plan,
             "result": result,
-            "answer_state": new_answer_state,
             "files": self.files,
+            "answer_state": new_answer_state
         })
+
         while len(self.answer_states) > self.max_states:
             self.answer_states.pop()
 
@@ -235,19 +259,18 @@ Most recent files, action, result, and answer states (newest to oldest): {self.a
     def reflection(self, **kwargs):
         @self.log_decorator
         def wrapped_reflection(things_to_reflect_on="", work_dir = ".", **kwargs):
-            formatted_answer_states = ""
-            for idx, answer_state in enumerate(self.answer_states):
-                formatted_answer_states += "\nStep: " + str(idx) 
-                formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
-                formatted_answer_states += "\nAction: " + answer_state['action'] 
-                # formatted_answer_states += "\nResult: " + answer_state['result'] 
-                formatted_answer_states += "\nAnswer: " + answer_state['answer_state'] 
+            formatted_history = ""
+            for idx, files_action_result_history in enumerate(self.files_action_result_history):
+                formatted_history += "\nStep: " + str(idx) 
+                formatted_history += "\nFiles: " + str(files_action_result_history['files']) 
+                formatted_history += "\nAction: " + files_action_result_history['action'] 
+                formatted_history += "\nResult: " + files_action_result_history['result']
 
             prompt = f"""We are trying to solve this research problem: {self.research_problem}
 
             Your current research log:
             ```
-            {formatted_answer_states}
+            {formatted_history}
             ```
 
             Reflect on this: {things_to_reflect_on} 
@@ -309,55 +332,92 @@ Most recent files, action, result, and answer states (newest to oldest): {self.a
 
             if not os.path.exists(os.path.join(work_dir, script_name)):
                 raise EnvException(f"The file {script_name} does not exist.")
+            
+            # Trying to get execute script to work on Windows
+            device = kwargs.get("device", "0")  # Default device is "0"
+            python_executable = kwargs.get("python", "python")  # Default Python command is "python"
+
+            # Set environment variables
+            env = os.environ.copy()
+            env['CUDA_VISIBLE_DEVICES'] = device
+
+            # Execute the script
             try:
-                script_path = script_name
-                device = kwargs.get("device", "0")  # Default device is "0"
-                python = kwargs.get("python", "python")  # Default Python command is "python"
+                process = subprocess.Popen(
+                    [python_executable, "-u", script_name],  # script_name is used directly
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=env,
+                    cwd=self.work_dir  # self.work_dir is used as the current working directory
+                )
+                stdout, stderr = process.communicate()  # This waits for the process to finish and gets the output
 
-                cmd = f"CUDA_VISIBLE_DEVICES={device} {python} -u {script_path}"
-                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, cwd=work_dir) # this sets the path for execution!
-
-                stdout_lines = []
-                stderr_lines = []
-
-                selector = selectors.DefaultSelector()
-                selector.register(process.stdout, selectors.EVENT_READ)
-                selector.register(process.stderr, selectors.EVENT_READ)
-
-                while process.poll() is None and selector.get_map():
-                    events = selector.select(timeout=1)
-
-                    for key, _ in events:
-                        line = key.fileobj.readline()
-                        if key.fileobj == process.stdout:
-                            print("STDOUT:", line, end =" ")
-                            stdout_lines.append(line)
-                        else:
-                            print("STDERR:", line, end =" ")
-                            stderr_lines.append(line)
-
-                for line in process.stdout:
-                    line = line
-                    print("STDOUT:", line, end =" ")
-                    stdout_lines.append(line)
-                for line in process.stderr:
-                    line = line
-                    print("STDERR:", line, end =" ")
-                    stderr_lines.append(line)
-
-                return_code = process.returncode
-
-                if return_code != 0:
-                    observation = "".join(stderr_lines)
+                if process.returncode != 0:
+                    # Handle error
+                    error_message = "Error executing the script: " + stderr
+                    print(error_message)
+                    return error_message
                 else:
-                    observation = "".join(stdout_lines)
-                if observation == "" and return_code == 0:
-                    # printed to stderr only
-                    observation = "".join(stderr_lines)
-
-                return "The script has been executed. Here is the output:\n" + observation + "\nSTDOUT:\n" + "".join(stdout_lines) + "\nSTDERR:\n" + "".join(stderr_lines)
+                    # Success
+                    success_message = "Script output: " + stdout
+                    print(success_message)
+                    return success_message
             except Exception as e:
                 raise EnvException(f"Something went wrong in executing {script_name}: {e}. Please check if it is ready to be executed.")
+
+
+
+            # Below works on non-Windows environments
+            # try:
+            #     script_path = script_name
+            #     device = kwargs.get("device", "0")  # Default device is "0"
+            #     python = kwargs.get("python", "python")  # Default Python command is "python"
+
+            #     cmd = f"CUDA_VISIBLE_DEVICES={device} {python} -u {script_path}"
+            #     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True, cwd=work_dir) # this sets the path for execution!
+
+            #     stdout_lines = []
+            #     stderr_lines = []
+
+            #     selector = selectors.DefaultSelector()
+            #     selector.register(process.stdout, selectors.EVENT_READ)
+            #     selector.register(process.stderr, selectors.EVENT_READ)
+
+            #     while process.poll() is None and selector.get_map():
+            #         events = selector.select(timeout=1)
+
+            #         for key, _ in events:
+            #             line = key.fileobj.readline()
+            #             if key.fileobj == process.stdout:
+            #                 print("STDOUT:", line, end =" ")
+            #                 stdout_lines.append(line)
+            #             else:
+            #                 print("STDERR:", line, end =" ")
+            #                 stderr_lines.append(line)
+
+            #     for line in process.stdout:
+            #         line = line
+            #         print("STDOUT:", line, end =" ")
+            #         stdout_lines.append(line)
+            #     for line in process.stderr:
+            #         line = line
+            #         print("STDERR:", line, end =" ")
+            #         stderr_lines.append(line)
+
+            #     return_code = process.returncode
+
+            #     if return_code != 0:
+            #         observation = "".join(stderr_lines)
+            #     else:
+            #         observation = "".join(stdout_lines)
+            #     if observation == "" and return_code == 0:
+            #         # printed to stderr only
+            #         observation = "".join(stderr_lines)
+
+            #     return "The script has been executed. Here is the output:\n" + observation + "\nSTDOUT:\n" + "".join(stdout_lines) + "\nSTDERR:\n" + "".join(stderr_lines)
+            # except Exception as e:
+            #     raise EnvException(f"Something went wrong in executing {script_name}: {e}. Please check if it is ready to be executed.")
         return wrapped_execute_script(**kwargs)
 
     def request_help(self, **kwargs):
@@ -446,7 +506,7 @@ Most recent files, action, result, and answer states (newest to oldest): {self.a
                             "content": function_response,
                         }
                     )
-                return "Function calling complete! Action and result should be saved to answer state."
+                return "Function calling complete! Action and result should be saved to history."
             
             return completion
         return wrapped_complete_text_openai(**kwargs)
@@ -626,22 +686,23 @@ Most recent files, action, result, and answer states (newest to oldest): {self.a
     
     # Formatting answer states for rapid experimentation
     def formatted_answer_states(self):
-        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
+        assert('files' in self.answer_states[0].keys() and 'attempted_task' in self.answer_states[0].keys() and 'plan' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys())
         formatted_answer_states = ""
         for idx, answer_state in enumerate(self.answer_states):
             formatted_answer_states += "\nStep: " + str(len(self.answer_states) - 1 - idx) 
+            formatted_answer_states += "\nAttempted Task: " + str(answer_state['attempted_task']) 
+            formatted_answer_states += "\nPlan: " + str(answer_state['plan']) 
+            formatted_answer_states += "\nResult: " + str(answer_state['result']) 
             formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
-            formatted_answer_states += "\nAction: " + answer_state['action'] 
-            formatted_answer_states += "\nResult: " + answer_state['result'] 
-            formatted_answer_states += "\nAnswer: " + answer_state['answer_state'] 
+            formatted_answer_states += "\nAnswer State: " + str(answer_state['answer_state']) 
         return formatted_answer_states
     
     def formatted_action_history(self):
-        assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
-        formatted_answer_states = ""
-        for idx, answer_state in enumerate(self.answer_states):
-            formatted_answer_states += "\nStep: " + str(len(self.answer_states) - 1 - idx) 
-            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
-            formatted_answer_states += "\nAction: " + answer_state['action'] 
-            formatted_answer_states += "\nResult: " + answer_state['result']
-        return formatted_answer_states
+        assert('action' in self.files_action_result_history[0].keys() and 'result' in self.files_action_result_history[0].keys() and 'files' in self.files_action_result_history[0].keys())
+        formatted_history = ""
+        for idx, files_action_result_history in enumerate(self.files_action_result_history):
+            formatted_history += "\nStep: " + str(len(self.files_action_result_history) - 1 - idx) 
+            formatted_history += "\nFiles: " + str(files_action_result_history['files']) 
+            formatted_history += "\nAction: " + files_action_result_history['action'] 
+            formatted_history += "\nResult: " + files_action_result_history['result']
+        return formatted_history

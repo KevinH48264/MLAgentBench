@@ -33,6 +33,10 @@ class Agent:
         # States
         self.answer_states = env.answer_states
         self.max_states = env.max_states
+        self.update_answer_state = env.update_answer_state
+
+        self.files_action_result_history = env.files_action_result_history
+        self.max_history = env.max_history
 
         # Actions
         self.tool_descriptions = env.tool_descriptions

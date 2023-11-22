@@ -192,7 +192,7 @@ TOOL_DESCRIPTIONS = [
                 },
                 "content": {
                     "type": "string",
-                    "description": "The content to be written to the file. Please know that the execute script function will execute from the same current working directory. Also that execute script will only output the stdout of the script, so do not use visualizations or other outputs that are not stdout."
+                    "description": "The content to be written to the file. Please know that the execute script function will execute from the same current working directory. Also that execute script will only output the stdout of the script, so do not use visualizations or other outputs that are not stdout. Be sure to include the file extension."
                 }
             },
             "required": ["file_name", "content"]
