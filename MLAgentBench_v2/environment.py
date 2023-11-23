@@ -112,14 +112,28 @@ class Environment:
             shutil.rmtree(self._log_dir)
         os.makedirs(self._log_dir)
         self.main_log_path = os.path.join(self.log_dir, "main_log.txt")
-        with open(self.main_log_path, 'w') as f:
-            pass
+        self.env_trace_path = os.path.join(self.log_dir, "latest_env_trace.json")
         self.num_steps = 0
         self._start_time = time.time()
 
         # Other variables in a partially observable Markov Decision Process
         # self.transition = None # Transition probabilities between states. Problem, how do you operate when you don't even know what s' is until you take action a from state s?
         # self.reward = S x A = reward function. # LLM. The agent is the reward modeler based on the Eureka paper. 
+
+        # Load state if environment trace exists to restore at latest checkpoint
+        if os.path.isfile(self.env_trace_path):
+            with open(self.env_trace_path, 'r') as f:
+                state = json.load(f)
+            self.files = state['files']
+            self.answer_states = state['answer_states']
+            self.files_action_result_history = state['files_action_result_history']
+            self.num_steps = state['num_steps']
+            self._start_time = state['start_time']
+
+            # Restore work_dir
+            if self.work_dir and os.path.exists(self.work_dir):
+                source_dir = os.path.join(self.log_dir, f"latest_work_dir")
+                shutil.copytree(source_dir, self.work_dir, dirs_exist_ok=True)
 
         # Checks
         assert(self.research_problem is not None)
@@ -168,8 +182,16 @@ class Environment:
 
             # Copy work_dir if it exists
             if self.work_dir and os.path.exists(self.work_dir):
+                # Save what the work dir was at the time of the action
                 dest_dir = os.path.join(self.log_dir, f"{self.num_steps}_work_dir")
                 shutil.copytree(self.work_dir, dest_dir, dirs_exist_ok=True)
+
+                # Update latest work dir to restore checkpoint
+                dest_dir = os.path.join(self.log_dir, f"latest_work_dir")
+                shutil.copytree(self.work_dir, dest_dir, dirs_exist_ok=True)
+
+                # Save env variables to restore checkpoint
+                self.save_env_state()
 
             # Update states
             self.num_steps += 1
@@ -253,6 +275,18 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
 
         while len(self.answer_states) > self.max_states:
             self.answer_states.pop()
+
+    def save_env_state(self):
+        """Save the environment state to work_dir for the agent to read."""
+        state = {
+            'files': self.files,
+            'answer_states': self.answer_states,
+            'files_action_result_history': self.files_action_result_history,
+            'num_steps': self.num_steps,
+            'start_time': self._start_time,
+        }
+        with open(self.env_trace_path, 'w') as f:
+            json.dump(state, f, indent=4)
 
     ############## for actions ##############
     
@@ -474,39 +508,42 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
                 raw_request["tool_choice"] = "auto"
                 
             # Call the API
-            messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
-            response = self.client.chat.completions.create(**{"messages": messages,**raw_request})
-            completion = response.choices[0].message.content
-            tool_calls = response.choices[0].message.tool_calls
+            try:
+                messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+                response = self.client.chat.completions.create(**{"messages": messages,**raw_request})
+                completion = response.choices[0].message.content
+                tool_calls = response.choices[0].message.tool_calls
 
-            # Ensure that the completion is JSON parsable. If it isn't, ask GPT to make it JSON parsable by increasing max tokens
-            if json_required and (model == "gpt-3.5-turbo-1106" or model == "gpt-4-1106-preview"):
-                try:
-                    completion_json = json.loads(completion)
-                except:
-                    convert_to_json_prompt = f'''Close this incomplete JSON so that it's in proper JSON format: {completion}'''
-                    messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": convert_to_json_prompt}]
-                    raw_request["max_tokens"] = max_tokens_to_sample + 100
-                    response = self.client.chat.completions.create(**{"messages": messages,**raw_request})
-                    completion = response.choices[0].message.content
+                # Ensure that the completion is JSON parsable. If it isn't, ask GPT to make it JSON parsable by increasing max tokens
+                if json_required and (model == "gpt-3.5-turbo-1106" or model == "gpt-4-1106-preview"):
+                    try:
+                        completion_json = json.loads(completion)
+                    except:
+                        convert_to_json_prompt = f'''Close this incomplete JSON so that it's in proper JSON format: {completion}'''
+                        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": convert_to_json_prompt}]
+                        raw_request["max_tokens"] = max_tokens_to_sample + 100
+                        response = self.client.chat.completions.create(**{"messages": messages,**raw_request})
+                        completion = response.choices[0].message.content
 
-            # Handle function calling
-            if tool_calls:
-                messages.append(response.choices[0].message)
-                for tool_call in tool_calls:
-                    function_name = tool_call.function.name
-                    function_to_call = available_functions[function_name]
-                    function_args = json.loads(tool_call.function.arguments)
-                    function_response = function_to_call(**function_args)
-                    messages.append(
-                        {
-                            "tool_call_id": tool_call.id,
-                            "role": "tool",
-                            "name": function_name,
-                            "content": function_response,
-                        }
-                    )
-                return "Function calling complete! Action and result should be saved to history."
+                # Handle function calling
+                if tool_calls:
+                    messages.append(response.choices[0].message)
+                    for tool_call in tool_calls:
+                        function_name = tool_call.function.name
+                        function_to_call = available_functions[function_name]
+                        function_args = json.loads(tool_call.function.arguments)
+                        function_response = function_to_call(**function_args)
+                        messages.append(
+                            {
+                                "tool_call_id": tool_call.id,
+                                "role": "tool",
+                                "name": function_name,
+                                "content": function_response,
+                            }
+                        )
+                    return "Function calling complete! Action and result should be saved to history."
+            except Exception as e:
+                completion = f"EnvError: Chat Completions API call failed: {e}. Please try again or edit your files or prompt based on the error message to prevent the error from happening again."
             
             return completion
         return wrapped_complete_text_openai(**kwargs)
@@ -526,83 +563,86 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
         if tool_descriptions is None:
             tool_descriptions = self.tool_descriptions
 
-        # Instantiate an Assistant
-        self.assistant = self.client.beta.assistants.create(
-            name="Research Agent",
-            instructions=system_prompt,
-            tools=tool_descriptions,
-            model=self.model
-        )
-        self.thread = self.client.beta.threads.create()
-
-        # Invoke the Assistants API to answer
-        self.client.beta.threads.messages.create(
-            thread_id=self.thread.id,
-            role="user",
-            content=user_prompt
-        )
-        run = self.client.beta.threads.runs.create(
-            thread_id=self.thread.id,
-            assistant_id=self.assistant.id,
-        )
-
-        # Wait until the run has looped
-        run_complete = False
-        num_tries = 100
-        while not run_complete:
-            # Check if there's an update on the run
-            run = self.client.beta.threads.runs.retrieve(
-                thread_id=self.thread.id,
-                run_id=run.id
+        try:
+            # Instantiate an Assistant
+            self.assistant = self.client.beta.assistants.create(
+                name="Research Agent",
+                instructions=system_prompt,
+                tools=tool_descriptions,
+                model=self.model
             )
-            run_complete = run.status == "completed"
-            print("\nrun.status: ", run.status)
+            self.thread = self.client.beta.threads.create()
 
-            # Call the tools if the run status is requires action
-            if run.status == "requires_action":
-                tool_outputs = []
-                for tool_call in run.required_action.submit_tool_outputs.tool_calls:
-                    tool_id, tool_function, tool_type = tool_call.id, tool_call.function, tool_call.type
-                    print(f"Run required action: \ntool_id: {tool_id}, \ntool_function.arguments: {tool_function.arguments}, \ntool_function.name: {tool_function.name}, \ntool_type: {tool_type}")
+            # Invoke the Assistants API to answer
+            self.client.beta.threads.messages.create(
+                thread_id=self.thread.id,
+                role="user",
+                content=user_prompt
+            )
+            run = self.client.beta.threads.runs.create(
+                thread_id=self.thread.id,
+                assistant_id=self.assistant.id,
+            )
 
-                    # Call the function directly if `tool_function` is a callable object
-                    # and `arguments` is a dictionary of arguments to pass to the function.
-                    try:
-                        arguments = json.loads(tool_function.arguments)
-                        function_output = self.available_actions[tool_function.name](**arguments)
-                    except Exception as e:
-                        function_output = f"Tool function {tool_function.name} for tool_id {tool_id} does not exist and is not callable with arguments {tool_function.arguments}. Make sure you are using only tools listed here: {self.available_actions.keys()} with the right arguments."
-
-                    tool_outputs.append({
-                        "tool_call_id": tool_id,
-                        "output": function_output
-                    })
-
-                # Submit tool outputs as a new run
-                run = self.client.beta.threads.runs.submit_tool_outputs(
+            # Wait until the run has looped
+            run_complete = False
+            num_tries = 100
+            while not run_complete:
+                # Check if there's an update on the run
+                run = self.client.beta.threads.runs.retrieve(
                     thread_id=self.thread.id,
-                    run_id=run.id,
-                    tool_outputs=tool_outputs
+                    run_id=run.id
                 )
-            elif run.status == "failed":
-                print("Run failed: ", run)
-                completion = "Assistants API call run failed. Please try again."
-                break
+                run_complete = run.status == "completed"
+                print("\nrun.status: ", run.status)
 
-            time.sleep(1)
-            num_tries -= 1
-            if num_tries == 0:
-                print("Run timed out, cancelling...")
-                run = self.client.beta.threads.runs.cancel(thread_id=self.thread.id, run_id=run.id)
-                while run.status != "cancelled":
-                    run = self.client.beta.threads.runs.retrieve(
+                # Call the tools if the run status is requires action
+                if run.status == "requires_action":
+                    tool_outputs = []
+                    for tool_call in run.required_action.submit_tool_outputs.tool_calls:
+                        tool_id, tool_function, tool_type = tool_call.id, tool_call.function, tool_call.type
+                        print(f"Run required action: \ntool_id: {tool_id}, \ntool_function.arguments: {tool_function.arguments}, \ntool_function.name: {tool_function.name}, \ntool_type: {tool_type}")
+
+                        # Call the function directly if `tool_function` is a callable object
+                        # and `arguments` is a dictionary of arguments to pass to the function.
+                        try:
+                            arguments = json.loads(tool_function.arguments)
+                            function_output = self.available_actions[tool_function.name](**arguments)
+                        except Exception as e:
+                            function_output = f"Tool function {tool_function.name} for tool_id {tool_id} does not exist and is not callable with arguments {tool_function.arguments}. Make sure you are using only tools listed here: {self.available_actions.keys()} with the right arguments."
+
+                        tool_outputs.append({
+                            "tool_call_id": tool_id,
+                            "output": function_output
+                        })
+
+                    # Submit tool outputs as a new run
+                    run = self.client.beta.threads.runs.submit_tool_outputs(
                         thread_id=self.thread.id,
-                        run_id=run.id
+                        run_id=run.id,
+                        tool_outputs=tool_outputs
                     )
-                print("Run cancelled!")
-                break
-        messages = self.client.beta.threads.messages.list(thread_id=self.thread.id)
-        completion = messages.data[0].content[0].text.value
+                elif run.status == "failed":
+                    print("Run failed: ", run)
+                    completion = "Assistants API call run failed. Please try again."
+                    break
+
+                time.sleep(1)
+                num_tries -= 1
+                if num_tries == 0:
+                    print("Run timed out, cancelling...")
+                    run = self.client.beta.threads.runs.cancel(thread_id=self.thread.id, run_id=run.id)
+                    while run.status != "cancelled":
+                        run = self.client.beta.threads.runs.retrieve(
+                            thread_id=self.thread.id,
+                            run_id=run.id
+                        )
+                    print("Run cancelled!")
+                    break
+            messages = self.client.beta.threads.messages.list(thread_id=self.thread.id)
+            completion = messages.data[0].content[0].text.value
+        except Exception as e:
+            completion = f"EnvError: Assistants API call failed: {e}. Please try again or edit your files or prompt based on the error message to prevent the error from happening again."
         return completion
 
     ############################## internal functions ########################################
