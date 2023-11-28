@@ -3,41 +3,42 @@ Goal: Creating an E2E system for testing as many agent frameworks and prompts (E
 Inputs:
 1. Research Problem: Ex. "It is your job to predict the sales price for each house. For each Id in the test set, you must predict the value of the SalePrice variable."
 2. Environment
-
-Process:
-1. Agent system -- 
-
-Output: 
-1. Research Problem output (submission.csv)
+Process: Agent system
+Output: Research Problem output (submission.csv)
 
 Principles:
-1. Agent interface
-- state (s) = #_relevant_steps * ({files, action, result, answer_state})
-- action space (A)
+1. Curriculum agent system interface
+- answer state (s) = #_relevant_steps * ({attempted task, plan, result, files, answer_state})
+- action space (A) = proposing a next task
 - reward model (R(s)) = research_problem
 - policy (pi) = LLM
-- transition model (P(s'|s,a)) = executing in the reality
-
-2. Environment class -- keep lightweight
-- Files -- work dir
+- transition model (P(s'|s,a)) = results from tactical agent executing in the reality
+2. Tactical agent system interface
+- memory state (s) = #_history * ({action, result, files}) -- only actions from methods, executor, critic agent?
+- action space (A) = actions & tools (reflection, read file, etc.)
+- reward model (R(s)) = task
+- policy (pi) == LLM
+- transition model (P(s'|s,a)) = executing in reality
+3. Environment class -- keep lightweight
+- Files -- work dir (includes a skill library of tasks and successful plans)
 - Action functions -- Code Interpreter, Read File, Write File, Search, Reflect, Final Answer
 - Log files -- log dir, supports logging of action functions
-3. Experimenting with different parameters via scripting
+4. Experimenting with different parameters via scripting
 
 MLAgentBench/
-│
-├── research_problem.txt    # Research problem
 ├── environment.py          # Minimal environment wrapper
+    ├── research_problem.txt    # Research problem
     └── actions.py              # Minimal actions
-├── agents/agent.py         # All agent classes defined here with a simple base class (MLAgentBench, Voyager, Curriculum Agent + Assistants API)
+├── agents/agent.py         # All agent classes defined here with a simple base class
 ├── prepare_task.py         # Prepare workspace
 └── runner.py               # Script to run an experiment with dynamic agent loading
-workspace/                  # Folder where the original files will be kept and the agent branch will be
+workspace/                  # Folder of files
 │
-├── <task-name>/            # Original downloaded or custom uploaded starter files (including answer.csv)
-└── <task-name>-branch/     # Branch that is the workspace of the agent (excluding answer.csv for eval)
-logs/                       # Logs where main_log tracks all action calls and outputs and folders are created to save workspace at each action call
-
+├── <task-name>/            # Original downloaded or custom uploaded starter files
+    └── skill_library/      # Global folder of successful tasks and their plans
+└── <task-name>-branch/     # Branch that is the workspace of the agent
+    └── skill_library/      # Copy of global skills library
+logs/                       # Logs where of main log, workspace saves, and env saves
 
 E2E Flow:
 0. Environment already has Actions pre-defined by owner.

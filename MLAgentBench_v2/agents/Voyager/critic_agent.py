@@ -1,65 +1,78 @@
-class CriticAgent():
+from MLAgentBench_v2.agents.agent import Agent
+import json
+
+class CriticAgent(Agent):
     # TODO: Perhaps include the skills to the critic so the critic knows the facts to check if this makes sense or not
+    def __init__(self, env):
+        super().__init__(env)
 
-    def check_task_success(self, task, methods_prompt, execution_feedback, skills, info_blocks, skill_manager):
-        system_prompt = '''You are an assistant that assesses my progress of research and provides useful guidance. 
+    def check_task_success(self, task, methods_prompt, execution_feedback):
+        # took out "Approach: My plan and reasoning to achieve the task." because critic agent would say Success to a good plan but incomplete reuslts
+        system_prompt = '''You are a first-rate researcher that assesses my progress of research and provides useful guidance. 
         
-        You are required to evaluate if I have provided a correct and direct answer to the question. Providing more information and exceeding the task requirements is also considered a success while failing to meet them or not actually answering the question requires you to provide critique to help me improve. Note that me providing steps is not enough, my final answer must be provided and directly answer the question.
+Based on the final files, actions, and results, you are required to evaluate if I have already completed and satisfied all the task requirements. Exceeding the task requirements is also considered a success while failing to complete any of them requires you to provide critique to help me improve and mark my success as False. There must be evidence to show that all the task requirements are already and fully completed for it to be counted as a success. This is important.
 
-        I will give you the following information:
-        Skills: My skills. 
-        Knowledge: My information blocks as files.
-        Task or question: The question I need to answer.
-        Answer: My current answer.
-        Approach: My reasoning of how I got to my answer.
+I will give you the following information:
+Task: The objective I need to accomplish.
+Skills: these are skills that I can take action with.
+Files: these are my current files that I have in my working directory.
+History of files, action, and result (newest to oldest): After following the plan, this is my history of files, action, and result I had and took at that point in time.
 
-        You should only respond in JSON format as described below:
-        {
-            "biggest_risk", "biggest risk for why the answer might not answer the question",
-            "reasoning": "reasoning for if the answer successfully answers the question or not",
-            "success": boolean,
-            "critique": "critique",
-        }
-        Ensure the response can be parsed by Python "json.loads", e.g.: no trailing commas, no single quotes, etc.
+You should only respond in JSON format as described below:
+```json
+{
+    "task": "task",
+    "evidence": "potential evidence of success",
+    "counter_evidence": "potential evidence of failure",
+    "reasoning": "reasoning",
+    "success": boolean,
+    "critique": "critique",
+}
+```
+Ensure the response can be parsed by Python "json.loads", e.g.: no trailing commas, no single quotes, etc.
+'''
+# Commenting out the example because GPT3.5 just inappropriately uses it verbatim it sometimes
+# RESPONSE:
+# {
+#     "reasoning": "The reasoning to get to the answer makes sense, but there's no direct answer for what the actual distribution of the sale price is.",
+#     "success": False,
+#     "critique": "The answer only tells us how to get the distribution is, but does not tell us what the actual distribution. Please tell us what the actual distribution is.",
+# }
 
-        Here are some examples:
-        INPUT:
-        Task or question: What is the distribution of the sale prices in the dataset?
-        Answer: To determine the distribution of the sale prices in the dataset, we can follow these steps:\n\n1. Read the dataset file "train.csv" using the `read_file` function.\n2. Extract the column containing the sale prices from the dataset.\n3. Calculate the frequency of each unique sale price in the dataset.\n4. Sort the unique sale prices in ascending order.\n5. Create a histogram or bar chart to visualize the distribution of the sale prices.\n6. Optionally, you can also calculate summary statistics such as mean, median, and standard deviation of the sale prices.\n\nLet\'s start by reading the dataset file "train.csv".
-        Approach: Task or question: What is the distribution of the sale prices in the dataset? \nInstructions: To determine the distribution of the sale prices in the dataset, you can follow these steps:\n\n1. Read the dataset file "train.csv" using the `read_file` function.\n2. Extract the column containing the sale prices from the dataset.\n3. Calculate the frequency of each unique sale price in the dataset.\n4. Sort the unique sale prices in ascending order.\n5. Create a histogram or bar chart to visualize the distribution of the sale prices.\n6. Optionally, you can also calculate summary statistics such as mean, median, and standard deviation of the sale prices.\n\nPlease note that the specific implementation details may vary depending on the programming language and libraries you are using.
+        # Commented out: "You can only read files to help check if task has been fully completed." because it didn't read all the files necessary sometimes
+        user_prompt = f'''Task: {task}
+Skills: {list(self.available_actions.keys())}
+Files: {self.files}
+History of files, action, and result: {self.formatted_action_history()}''' # Execution feedback should be logged in self.formatted_action_history()
 
-        RESPONSE:
-        {
-            "biggest_risk", "There is no actual distribution in the answer.",
-            "reasoning": "The reasoning to get to the answer makes sense, but there's no direct answer for what the actual distribution of the sale price is.",
-            "success": False,
-            "critique": "The answer only tells us how to get the distribution is, but does not tell us what the actual distribution. Please tell us what the actual distribution is.",
-        }
-        '''
+        # 1. Employing a read assistant first to log files to be checked into file_action_result_history for the critic agent
+        response_message = self.run_assistant(system_prompt=system_prompt, user_prompt=user_prompt, tool_descriptions=self.read_tool_description)
 
-        user_prompt = f'''Skills: {skills}
-        Knowledge: {info_blocks}
-        Task or question: {task}
-        Answer: {execution_feedback}
-        Approach: {methods_prompt}'''
+        # 2. Employing a chat completion based on the updated file_action_reuslt_history to make a final judgement
+        user_prompt = f'''Task: {task}
+Skills: {list(self.available_actions.keys())}
+Files: {self.files}
+History of files, action, and result: {self.formatted_action_history()}''' # Execution feedback should be logged in self.formatted_action_history()
+        
+        self.log("Critic system prompt: ", system_prompt, "\n\nCritic user prompt: ", user_prompt, "\n\nTask: " + task + "\n\nCritic response: ", response_message)
 
-        response_message, messages = chat_openai(system_prompt=system_prompt, prompt=user_prompt, verbose=True)
+        response_message = self.complete_text_openai(system_prompt=system_prompt, user_prompt=response_message, json_required=True)
 
-        response_json = json.loads(response_message['content'])
-        success = response_json['success']
-        reasoning = response_json['reasoning']
-        critique = response_json['critique']
+        try:
+            response_json = json.loads(response_message)
+            task = str(response_json['task'])
+            success = response_json['success'] # Must be bool
+            evidence = str(response_json['evidence'])
+            opposition = str(response_json['counter_evidence'])
+            reasoning = str(response_json['reasoning'])
+            critique = str(response_json['critique'])
+        except Exception as e:
+            return False, response_message + " JSON parsing error: " + str(e)
 
-        # lines = response_message['content'].split("\n")
-        # for line in lines:
-        #     # Strip whitespace for accurate matching
-        #     line = line.strip()
-            
-        #     # Check if the line starts with the known titles and parse accordingly
-        #     if line.startswith('Reasoning:'):
-        #         critique = line[len('Reasoning:'):].strip()
-        #     elif line.startswith('Task is reasonably answered:'):
-        #         success = line[len('Task is reasonably answered:'):].strip().lower()
+        # Handle null values
+        if not reasoning:
+            reasoning = ""
+        if not critique:
+            critique = ""
 
-        print("System prompt: ", system_prompt, "\n\nUser prompt: ", user_prompt, "\n\nResponse: ", response_message['content'])
-        return success, critique
+        return success, "\nEvidence: " + evidence + "\nCounter evidence: " + opposition + "\nReasoning: " + reasoning + "\nCritique: " + critique

@@ -37,6 +37,8 @@ class Agent:
 
         self.files_action_result_history = env.files_action_result_history
         self.max_history = env.max_history
+        self.completed_tasks = [] # for curriculum agent
+        self.failed_tasks = [] # for curriculum agent
 
         # Actions
         self.tool_descriptions = env.tool_descriptions
@@ -45,13 +47,17 @@ class Agent:
         self.model = env.model
         self.complete_text_openai = env.complete_text_openai
         self.run_assistant = env.run_assistant
+        self.search_wikipedia = env.search_wikipedia
 
         self.work_dir = env.work_dir
         self.files = env.files
+        self.files_no_skill_lib = env.files_no_skill_lib # temporary to not give the curriculum agent the skill library
 
         # Logging
         # self.log_dir = env.log_dir
         self.main_log_path = env.main_log_path
+        self.log = env.log
+        self.num_tasks = env.num_tasks
         # self.num_steps = env.num_steps
 
         # Misc

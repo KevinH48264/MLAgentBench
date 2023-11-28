@@ -19,6 +19,7 @@ import copy
 import time
 import fnmatch
 import signal
+import requests
 from traceback import format_exception
 from multiprocessing import active_children
 # import readline # to make sure input() works properly # Not on Windows
@@ -55,8 +56,9 @@ class Environment:
             task_type = args.task_type
         )
         self.files = [os.path.relpath(os.path.join(root, file), self.work_dir) for root, dirs, files in os.walk(self.work_dir) for file in files] # Include skill library files for now
-        self.max_states = 8
-        self.max_history = 8
+        self.files_no_skill_lib = os.listdir(self.work_dir) # temporary to not give the curriculum agent the skill library to see if it can come up with better ideas
+        self.max_states = 16
+        self.max_history = 16
         self.answer_states = [{
             "attempted_task": "None",
             "plan": "None",
@@ -69,6 +71,8 @@ class Environment:
             "result": "None",
             "files": self.files,
         }] 
+        self.completed_tasks = [] # for curriculum agent
+        self.failed_tasks = [] # for curriculum agent
 
         # Set up actions
         self._tool_descriptions = TOOL_DESCRIPTIONS # Formatted for OpenAI function calling
@@ -97,43 +101,49 @@ class Environment:
                 # 'openaiAssistantCreateRun': pass,
                 # 'openaiAssistantListThreadMessageCompletion': pass,
             }
-        # self.final_answer = False
+        self.request_session = requests.Session()
 
         # Assistants API specific instantiation
         openai.api_key = os.getenv("OPENAI_API_KEY")
         self.client = OpenAI(api_key=openai.api_key)
         self.model = args.llm_name
-        self.MAX_PROMPT_TOKENS = 4000
+        self.MAX_PROMPT_TOKENS = 6000
         self.MAX_TOKENS_TO_SAMPLE = 2000
 
         # Set up logging, overwrite existing logs if they exist
         self._log_dir = args.log_dir
-        if os.path.exists(self._log_dir):
-            shutil.rmtree(self._log_dir)
-        os.makedirs(self._log_dir)
         self.main_log_path = os.path.join(self.log_dir, "main_log.txt")
         self.env_trace_path = os.path.join(self.log_dir, "latest_env_trace.json")
         self.num_steps = 0
+        self.num_tasks = 0
         self._start_time = time.time()
 
         # Other variables in a partially observable Markov Decision Process
         # self.transition = None # Transition probabilities between states. Problem, how do you operate when you don't even know what s' is until you take action a from state s?
         # self.reward = S x A = reward function. # LLM. The agent is the reward modeler based on the Eureka paper. 
 
-        # Load state if environment trace exists to restore at latest checkpoint
+        # Load state if environment trace exists to restore at latest checkpoint, otherwise, create new logged file
         if os.path.isfile(self.env_trace_path):
+            self.log(f"\n\n--- RESTORING ENVIRONMENT CHECKPOINT HERE ---\n")
             with open(self.env_trace_path, 'r') as f:
                 state = json.load(f)
             self.files = state['files']
             self.answer_states = state['answer_states']
             self.files_action_result_history = state['files_action_result_history']
-            self.num_steps = state['num_steps']
+            self.num_steps = state['num_steps'] + 1 # Offset so there's no overlap
+            self.num_tasks = state['num_tasks'] + 1
             self._start_time = state['start_time']
 
+            if 'completed_tasks' in state:
+                self.completed_tasks = state['completed_tasks']
+            if 'failed_tasks' in state:
+                self.failed_tasks = state['failed_tasks']
+
             # Restore work_dir
-            if self.work_dir and os.path.exists(self.work_dir):
-                source_dir = os.path.join(self.log_dir, f"latest_work_dir")
-                shutil.copytree(source_dir, self.work_dir, dirs_exist_ok=True)
+            source_dir = os.path.join(self.log_dir, f"latest_work_dir")
+            shutil.copytree(source_dir, self.work_dir, dirs_exist_ok=True)
+        elif not os.path.exists(self.log_dir):
+            os.makedirs(self._log_dir)
 
         # Checks
         assert(self.research_problem is not None)
@@ -154,31 +164,31 @@ class Environment:
 
             # Update research log
             try:
-                print(f"\n\n--- LOGGING NEW ACTION ---\nStep: {self.num_steps}\nCalling function {func.__name__}(args = {args}, kwargs = {kwargs})\n")
+                self.log(f"\n\n--- LOGGING NEW ACTION ---\nStep: {self.num_steps}\nCalling function {func.__name__}(args = {args}, kwargs = {kwargs})\n")
 
                 # Perform the actual function
                 result = func(*args, **kwargs)
 
-                print("--- TOOL SUCCESS ---")
+                self.log("--- TOOL SUCCESS ---")
             except TooLongPromptError:
                 result = "EnvError: too long input for the tool"
-                print("--- TOOL ERROR ---", e)
+                self.log("--- TOOL ERROR ---", e)
             except LLMError as e:
                 result = "LLMError: " + e.message
-                print("--- TOOL ERROR ---", e)
+                self.log("--- TOOL ERROR ---", e)
             except EnvException as e:
                 result = "EnvError: " + e.message
-                print("--- TOOL ERROR ---", e)
+                self.log("--- TOOL ERROR ---", e)
             except TypeError as e:
                 invalid_action_error = f"The arguments needs to have proper entries. You may have missed some entries or used inappropriate ones. Please use the correct format and try again."
                 result = "EnvError: " + invalid_action_error
-                print("--- TOOL ERROR ---", e)
+                self.log("--- TOOL ERROR ---", e)
             # except TimeoutException as e:
             #     raise e
-            #     print("--- TOOL ERROR ---", e)
+            #     self.log("--- TOOL ERROR ---", e)
             except Exception as e:
                 result = f"EnvError: Error executing {func.__name__}."
-                print("--- TOOL ERROR ---", e)
+                self.log("--- TOOL ERROR ---", e)
 
             # Copy work_dir if it exists
             if self.work_dir and os.path.exists(self.work_dir):
@@ -197,22 +207,22 @@ class Environment:
             self.num_steps += 1
             kwargs['work_dir'] = "." # replace work_dir for the agent to stay in its workspace when it reads the answer states
 
-            # Update history to have newest action and result to oldest
-            self.files_action_result_history.insert(0, {
-                "files": self.files,
-                "action": f"Calling function {func.__name__}(args = {args}, kwargs = {kwargs})"[:self.MAX_PROMPT_TOKENS * 4], # Chat completion will automatically truncate when history is added
-                "result": result,
-            })
-            while len(self.files_action_result_history) > self.max_history:
-                self.files_action_result_history.pop()
+            # Update history to have newest action and result to oldest, only if update_files_action_result_history is not False
+            if not 'update_files_action_result_history' in kwargs or kwargs['update_files_action_result_history'] != False:
+                self.files_action_result_history.insert(0, {
+                    "files": self.files,
+                    "action": f"Calling function {func.__name__}(args = {args}, kwargs = {kwargs})"[:self.MAX_PROMPT_TOKENS * 4], # Chat completion will automatically truncate when history is added
+                    "result": result,
+                })
+                while len(self.files_action_result_history) > self.max_history:
+                    self.files_action_result_history.pop()
             
             # Log most recent state
-            with open(self.main_log_path, "a", 1) as log_file:
-                log_file.write(f"\nStep: {self.num_steps}\n{json.dumps(self.files_action_result_history[0], indent=4)}\n")
+            self.log(f"\nStep: {self.num_steps}\n{json.dumps(self.files_action_result_history[0], indent=4)}\n")
             return result
         return wrapper
     
-    # Update answer state
+    # Update answer state for curriculum agent
     def update_answer_state(self, attempted_task, plan, result):
         """Update the states of the agent based on attempted_task, plan, result, and files.
         TODO: Extra 1: Break up the state into 1) problem 2) current best answer 3) metric 4) problem to solve 5) next step / plan to solve the problem -- some kind of structure like that.
@@ -223,7 +233,7 @@ class Environment:
         # Update files
         self.files = [os.path.relpath(os.path.join(root, file), self.work_dir) for root, dirs, files in os.walk(self.work_dir) for file in files] # Include skill library files for now
 
-        system_prompt = '''You are a helpful assistant. Given a research goal, your goal is to improve the answer.
+        system_prompt = '''You are a helpful assistant and first-rate researcher. Given a research goal, your goal is to improve your answer state.
 
 You will be given this information:
 Research Goal: ...
@@ -232,18 +242,18 @@ Attempted Task: Task to accomplish to better achieve the research goal
 Plan: Plan to accomplish the task
 Result: Evaluation after executing plan
 Files: Files after executing plan
-Most recent attempted tasks, plans, results, files, and answer states (newest to oldest): ...
+Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer states (newest to oldest): ...
 
-You should then respond to me with 1) your best answer given the new attempted task, plan, result, and files, 2) problems that still exist if you haven't solved the research problem, and 3) a plan containing approaches to potentially solve those problems.
+You should then respond to me with 1) your best answer given the new attempted task, plan, result, and files, 2) specific problems that still exist, and 3) a plan containing approaches to potentially solve those problems.
 '''
 
         user_prompt = f'''Research Goal: {self.research_problem}
 Tools / functions: {list(self.available_actions.keys())}
-Attempted Task: {attempted_task}
-Plan: {plan}
-Result: {result}
-Files: {self.files}
-Most recent attempted tasks, plans, results, files, and answer states (newest to oldest): 
+a) Attempted Task: {attempted_task}
+b) Plan: {plan}
+c) Result: {result}
+d) Files: {self.files}
+Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer states (newest to oldest): 
 {self.formatted_answer_states()}
 '''
 
@@ -251,8 +261,7 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
         # Truncate user prompt if too long and add a note
         if len(user_prompt) > self.MAX_PROMPT_TOKENS * 4:
             user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] + f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
-            with open(self.main_log_path, "a", 1) as log_file:
-                log_file.write(f"\n(update_answer_states) Truncated user prompt: {user_prompt}\n")
+            self.log(f"\n(update_answer_states) Truncated user prompt: {user_prompt}\n")
 
         raw_request = {
             "model": self.model,
@@ -263,6 +272,7 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
         response = self.client.chat.completions.create(**{"messages": messages, **raw_request})
         new_answer_state = response.choices[0].message.content
+        self.log(f"\n(update_answer_states) New answer state: {new_answer_state}\n")
 
         # Update answer state to have newest action and result to oldest
         self.answer_states.insert(0, {
@@ -270,7 +280,7 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
             "plan": plan,
             "result": result,
             "files": self.files,
-            "answer_state": new_answer_state
+            "answer_state": new_answer_state,
         })
 
         while len(self.answer_states) > self.max_states:
@@ -284,6 +294,9 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
             'files_action_result_history': self.files_action_result_history,
             'num_steps': self.num_steps,
             'start_time': self._start_time,
+            'num_tasks': self.num_tasks,
+            'completed_tasks': self.completed_tasks,
+            'failed_tasks': self.failed_tasks,
         }
         with open(self.env_trace_path, 'w') as f:
             json.dump(state, f, indent=4)
@@ -390,12 +403,12 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
                 if process.returncode != 0:
                     # Handle error
                     error_message = "Error executing the script: " + stderr
-                    print(error_message)
+                    self.log(error_message)
                     return error_message
                 else:
                     # Success
                     success_message = "Script output: " + stdout
-                    print(success_message)
+                    self.log(success_message)
                     return success_message
             except Exception as e:
                 raise EnvException(f"Something went wrong in executing {script_name}: {e}. Please check if it is ready to be executed.")
@@ -424,19 +437,19 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
             #         for key, _ in events:
             #             line = key.fileobj.readline()
             #             if key.fileobj == process.stdout:
-            #                 print("STDOUT:", line, end =" ")
+            #                 self.log("STDOUT:", line, end =" ")
             #                 stdout_lines.append(line)
             #             else:
-            #                 print("STDERR:", line, end =" ")
+            #                 self.log("STDERR:", line, end =" ")
             #                 stderr_lines.append(line)
 
             #     for line in process.stdout:
             #         line = line
-            #         print("STDOUT:", line, end =" ")
+            #         self.log("STDOUT:", line, end =" ")
             #         stdout_lines.append(line)
             #     for line in process.stderr:
             #         line = line
-            #         print("STDERR:", line, end =" ")
+            #         self.log("STDERR:", line, end =" ")
             #         stderr_lines.append(line)
 
             #     return_code = process.returncode
@@ -446,7 +459,7 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
             #     else:
             #         observation = "".join(stdout_lines)
             #     if observation == "" and return_code == 0:
-            #         # printed to stderr only
+            #         # self.loged to stderr only
             #         observation = "".join(stderr_lines)
 
             #     return "The script has been executed. Here is the output:\n" + observation + "\nSTDOUT:\n" + "".join(stdout_lines) + "\nSTDERR:\n" + "".join(stderr_lines)
@@ -485,10 +498,9 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
             # Truncate user prompt if too long and add a note
             if len(user_prompt) > self.MAX_PROMPT_TOKENS * 4:
                 user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] + f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
-                with open(self.main_log_path, "a", 1) as log_file:
-                    log_file.write(f"\n(complete_text_openai) Truncated user prompt: {user_prompt}\n")
-                print("Truncated user prompt: ", user_prompt)
-                print("# of input tokens start: ", len(system_prompt + user_prompt) // 4)
+                self.log(f"\n(complete_text_openai) Truncated user prompt: {user_prompt}\n")
+                self.log("Truncated user prompt: ", user_prompt)
+                self.log("# of input tokens start: ", len(system_prompt + user_prompt) // 4)
             
             kwargs.pop('work_dir', None) # Chat completions can't take work_dir as an arg
             raw_request = {
@@ -554,10 +566,9 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
         if len(user_prompt) > self.MAX_PROMPT_TOKENS * 4:
             user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4]
             user_prompt += f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
-            with open(self.main_log_path, "a", 1) as log_file:
-                log_file.write(f"\n(run_assistant) Truncated user prompt: {user_prompt}\n")
-            print("Assistants Truncated user prompt: ", user_prompt)
-            print("# of input tokens start: ", len(system_prompt + user_prompt) // 4)
+            self.log(f"\n(run_assistant) Truncated user prompt: {user_prompt}\n")
+            self.log("Assistants Truncated user prompt: ", user_prompt)
+            self.log("# of input tokens start: ", len(system_prompt + user_prompt) // 4)
             
         # Default tool_descriptions is the initialized one
         if tool_descriptions is None:
@@ -594,14 +605,14 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
                     run_id=run.id
                 )
                 run_complete = run.status == "completed"
-                print("\nrun.status: ", run.status)
+                self.log("\nrun.status: ", run.status)
 
                 # Call the tools if the run status is requires action
                 if run.status == "requires_action":
                     tool_outputs = []
                     for tool_call in run.required_action.submit_tool_outputs.tool_calls:
                         tool_id, tool_function, tool_type = tool_call.id, tool_call.function, tool_call.type
-                        print(f"Run required action: \ntool_id: {tool_id}, \ntool_function.arguments: {tool_function.arguments}, \ntool_function.name: {tool_function.name}, \ntool_type: {tool_type}")
+                        self.log(f"Run required action: \ntool_id: {tool_id}, \ntool_function.arguments: {tool_function.arguments}, \ntool_function.name: {tool_function.name}, \ntool_type: {tool_type}")
 
                         # Call the function directly if `tool_function` is a callable object
                         # and `arguments` is a dictionary of arguments to pass to the function.
@@ -623,21 +634,21 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
                         tool_outputs=tool_outputs
                     )
                 elif run.status == "failed":
-                    print("Run failed: ", run)
+                    self.log("Run failed: ", run)
                     completion = "Assistants API call run failed. Please try again."
                     break
 
                 time.sleep(1)
                 num_tries -= 1
                 if num_tries == 0:
-                    print("Run timed out, cancelling...")
+                    self.log("Run timed out, cancelling...")
                     run = self.client.beta.threads.runs.cancel(thread_id=self.thread.id, run_id=run.id)
                     while run.status != "cancelled":
                         run = self.client.beta.threads.runs.retrieve(
                             thread_id=self.thread.id,
                             run_id=run.id
                         )
-                    print("Run cancelled!")
+                    self.log("Run cancelled!")
                     break
             messages = self.client.beta.threads.messages.list(thread_id=self.thread.id)
             completion = messages.data[0].content[0].text.value
@@ -658,7 +669,7 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
     def __exit__(self, exc_type, exc_value, traceback):  
         # save error message
         active = active_children()
-        print(f'Active Children: {len(active)}')
+        self.log(f'Active Children: {len(active)}')
         # terminate all active children
         for child in active:
             child.terminate()
@@ -667,10 +678,10 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
             child.join()
         # report active children
         active = active_children()
-        print(f'Active Children: {len(active)}')
+        self.log(f'Active Children: {len(active)}')
             
         if traceback is not None:
-            print("Error message saved in error.txt")
+            self.log("Error message saved in error.txt")
             open(os.path.join(self.log_dir, "error.txt"), "w").write(''.join(format_exception(exc_type, exc_value, traceback)))
         open(os.path.join(self.log_dir, "overall_time.txt"), "w").write(str(time.time() - self.start_time))
            
@@ -730,11 +741,11 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
         formatted_answer_states = ""
         for idx, answer_state in enumerate(self.answer_states):
             formatted_answer_states += "\nStep: " + str(len(self.answer_states) - 1 - idx) 
-            formatted_answer_states += "\nAttempted Task: " + str(answer_state['attempted_task']) 
-            formatted_answer_states += "\nPlan: " + str(answer_state['plan']) 
-            formatted_answer_states += "\nResult: " + str(answer_state['result']) 
-            formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
-            formatted_answer_states += "\nAnswer State: " + str(answer_state['answer_state']) 
+            formatted_answer_states += "\na) Attempted Task: " + str(answer_state['attempted_task']) 
+            formatted_answer_states += "\nb) Plan: " + str(answer_state['plan']) 
+            formatted_answer_states += "\nc) Result: " + str(answer_state['result']) 
+            formatted_answer_states += "\nd) Files: " + str(answer_state['files']) 
+            formatted_answer_states += "\ne) Answer State: " + str(answer_state['answer_state']) 
         return formatted_answer_states
     
     def formatted_action_history(self):
@@ -746,3 +757,41 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
             formatted_history += "\nAction: " + files_action_result_history['action'] 
             formatted_history += "\nResult: " + files_action_result_history['result']
         return formatted_history
+    
+    def search_wikipedia(self, concept):
+        # Get the page ID for the concept
+        url = "https://en.wikipedia.org/w/api.php"
+        params = {
+            "action": "query",
+            "format": "json",
+            "list": "search",
+            "srsearch": concept
+        }
+        response = self.request_session.get(url=url, params=params)
+        data = response.json()
+        page_id = data['query']['search'][0]['pageid']
+
+        # Get the page content for the page ID
+        params = {
+            "action": "query",
+            "format": "json",
+            "prop": "extracts",
+            "pageids": page_id,
+            "explaintext": True
+        }
+        response = self.request_session.get(url=url, params=params)
+        text = response.json()['query']['pages'][str(page_id)]['extract']
+
+        # Truncate text if necessary. Divide by 2 because the text likely won't be that significant, we'll use only the first half of the text on the page
+        max_chars = self.MAX_PROMPT_TOKENS * 4 // 2
+        if len(text) > max_chars:
+            text = text[:max_chars]
+            text += f"... The rest was truncated because it was too long (over {max_chars} chars). Please use the information given above."
+            self.log(f"\n(wikipedia) Truncated wikipedia text: {text}\n")
+        return text
+
+    def log(self, *args):
+        message = ' '.join(str(arg) for arg in args)
+        with open(self.main_log_path, "a", encoding='utf-8', buffering=1) as log_file:
+            log_file.write(message + '\n')
+        print(message)
