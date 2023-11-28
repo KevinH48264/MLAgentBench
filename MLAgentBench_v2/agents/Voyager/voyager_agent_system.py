@@ -71,7 +71,7 @@ class VoyagerAgent(Agent):
 
                 self.log("\nStarting critic agent")
                 success, critique = self.critic_agent.check_task_success(task=next_task, methods_prompt=methods_prompt, execution_feedback=execution_feedback)
-                self.log("Critic agent output", "\nSuccess: ", success, "\nCritique: ", critique)
+                self.log("Critic agent output", "\nOriginal task: ", next_task, "\nSuccess: ", success, "\nEvaluation: ", critique)
 
                 if success:
                     break

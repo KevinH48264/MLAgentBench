@@ -53,10 +53,10 @@ History of files, action, and result: {self.formatted_action_history()}''' # Exe
 Skills: {list(self.available_actions.keys())}
 Files: {self.files}
 History of files, action, and result: {self.formatted_action_history()}''' # Execution feedback should be logged in self.formatted_action_history()
-        
-        self.log("Critic system prompt: ", system_prompt, "\n\nCritic user prompt: ", user_prompt, "\n\nTask: " + task + "\n\nCritic response: ", response_message)
 
         response_message = self.complete_text_openai(system_prompt=system_prompt, user_prompt=response_message, json_required=True)
+
+        self.log("Critic system prompt: ", system_prompt, "\n\nCritic user prompt: ", user_prompt, "\n\nTask: " + task + "\n\nCritic response: ", response_message)
 
         try:
             response_json = json.loads(response_message)

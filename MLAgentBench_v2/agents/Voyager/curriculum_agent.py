@@ -81,7 +81,7 @@ Failed tasks that are too hard (most recent to least): ...
 Most recent attempted tasks, plans, results, files, and answer states (newest to oldest): Answer states are the report of the best answer I have so far to achieving the research goal, and the attempted tasks, plans, results, and files are the tasks, plans, results, and files I took and had at that point in time to update the answer state.
 
 You must follow the following critiera:
-1) You should ask at least 5 questions (but no more than 10 questions) to help me decide the next immediate task to do. Each quesiton should be followed by the concept that the question is about.
+1) You should ask at least 5 questions (but no more than 10 questions) to help me decide the next immediate task to do. Each question should be followed by the concept that the question is about.
 2) You question should be specific to a concept in Wikipedia. The question should not be too general.
 Bad example (the question is too general):
 Question: What is the best way to achieve the research goal?

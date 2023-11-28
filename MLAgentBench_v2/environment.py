@@ -161,8 +161,11 @@ class Environment:
             self.files = [os.path.relpath(os.path.join(root, file), self.work_dir) for root, dirs, files in os.walk(self.work_dir) for file in files] # Include skill library files for now
             kwargs['work_dir'] = self.work_dir # Update to actual work_dir
             assert(kwargs['work_dir'] == self.work_dir) # Ensure that the work_dir sent into any function is the work directory and nothing else
+            update_history = kwargs.get('update_files_action_result_history', True)
+            kwargs.pop('update_files_action_result_history', None) # Remove update_files_action_result_history from kwargs so that it doesn't get passed into the function
 
             # Update research log
+            # TODO: Maybe the except errors aren't logging the full errors / information into "result"? 
             try:
                 self.log(f"\n\n--- LOGGING NEW ACTION ---\nStep: {self.num_steps}\nCalling function {func.__name__}(args = {args}, kwargs = {kwargs})\n")
 
@@ -171,7 +174,7 @@ class Environment:
 
                 self.log("--- TOOL SUCCESS ---")
             except TooLongPromptError:
-                result = "EnvError: too long input for the tool"
+                result = f"EnvError: too long input for the tool.\n{e}" 
                 self.log("--- TOOL ERROR ---", e)
             except LLMError as e:
                 result = "LLMError: " + e.message
@@ -180,14 +183,14 @@ class Environment:
                 result = "EnvError: " + e.message
                 self.log("--- TOOL ERROR ---", e)
             except TypeError as e:
-                invalid_action_error = f"The arguments needs to have proper entries. You may have missed some entries or used inappropriate ones. Please use the correct format and try again."
+                invalid_action_error = f"The arguments needs to have proper entries. You may have missed some entries or used inappropriate ones. Please use the correct format and try again.\n{e}"
                 result = "EnvError: " + invalid_action_error
                 self.log("--- TOOL ERROR ---", e)
             # except TimeoutException as e:
             #     raise e
             #     self.log("--- TOOL ERROR ---", e)
             except Exception as e:
-                result = f"EnvError: Error executing {func.__name__}."
+                result = f"EnvError: Error executing {func.__name__}.\n{e}"
                 self.log("--- TOOL ERROR ---", e)
 
             # Copy work_dir if it exists
@@ -208,7 +211,7 @@ class Environment:
             kwargs['work_dir'] = "." # replace work_dir for the agent to stay in its workspace when it reads the answer states
 
             # Update history to have newest action and result to oldest, only if update_files_action_result_history is not False
-            if not 'update_files_action_result_history' in kwargs or kwargs['update_files_action_result_history'] != False:
+            if update_history:
                 self.files_action_result_history.insert(0, {
                     "files": self.files,
                     "action": f"Calling function {func.__name__}(args = {args}, kwargs = {kwargs})"[:self.MAX_PROMPT_TOKENS * 4], # Chat completion will automatically truncate when history is added
@@ -218,7 +221,7 @@ class Environment:
                     self.files_action_result_history.pop()
             
             # Log most recent state
-            self.log(f"\nStep: {self.num_steps}\n{json.dumps(self.files_action_result_history[0], indent=4)}\n")
+            self.log(f"\nStep: {self.num_steps}\nfiles_action_result_history:\n{json.dumps(self.files_action_result_history[0], indent=4)}\n")
             return result
         return wrapper
     
