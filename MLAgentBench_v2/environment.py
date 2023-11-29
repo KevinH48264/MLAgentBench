@@ -212,16 +212,27 @@ class Environment:
 
             # Update history to have newest action and result to oldest, only if update_files_action_result_history is not False
             if update_history:
+                # TODO: temporary fix is to summarize the action to not deal with a recursive history loop. TODO: Given that I'm summarizing, the true action and result should be logged in a memory folder in the workspace so the ground truth can be accessed somewhere. Step indexes should also be available.
+                summarize_action_system_prompt = '''You are a helpful assistant. Your goal is to re-iterate the action taken without the long history section. Therefore, the output should be much shorter and only contain the function name and the most important and relevant arguments and their values. If the history argument is important, than please just summarize it. Do not answer or respond to the action, only re-iterate what the action is and the important parts of the argument values without the history argument.
+                
+                You will be given this information:
+                Action: ...'''
+                summarized_action = self.summarize_without_logging(system_prompt=summarize_action_system_prompt, user_prompt=f"Action: Calling function {func.__name__}(args = {args}, kwargs = {kwargs}) \nPlease respond with only the concise re-iteration of the action taken and the most important and relevant arguments and their values.")
+                self.log("\n--- ORIGINAL ACTION ---\n", f"Calling function {func.__name__}(args = {args}, kwargs = {kwargs})", "\n--- ACTION SUMMARY ---\n", summarized_action)
+
                 self.files_action_result_history.insert(0, {
                     "files": self.files,
-                    "action": f"Calling function {func.__name__}(args = {args}, kwargs = {kwargs})"[:self.MAX_PROMPT_TOKENS * 4], # Chat completion will automatically truncate when history is added
+                    "action": summarized_action, # Chat completion will automatically truncate when history is added
                     "result": result,
                 })
                 while len(self.files_action_result_history) > self.max_history:
                     self.files_action_result_history.pop()
             
-            # Log most recent state
-            self.log(f"\nStep: {self.num_steps}\nfiles_action_result_history:\n{json.dumps(self.files_action_result_history[0], indent=4)}\n")
+                # Log most recent state
+                self.log(f"\nStep: {self.num_steps}\nfiles_action_result_history latest addition:\n{json.dumps(self.files_action_result_history[0], indent=4)}\n")
+            else:
+                # Log most recent action and result for debuggomg
+                self.log(f"\n\n--- Step: {self.num_steps} not recorded in history\n\n--- Step Action: Calling function {func.__name__}(args = {args}, kwargs = {kwargs})\n\n--- Step Result: {result}\n")
             return result
         return wrapper
     
@@ -303,6 +314,25 @@ Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer st
         }
         with open(self.env_trace_path, 'w') as f:
             json.dump(state, f, indent=4)
+
+    def summarize_without_logging(self, system_prompt, user_prompt):
+        # Raw Chat Completion API to avoid logging loop
+        # Truncate user prompt if too long and add a note
+        if len(user_prompt) > self.MAX_PROMPT_TOKENS * 4:
+            user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] + f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
+            self.log(f"\n(summarize_without_logging) Truncated user prompt: {user_prompt}\n")
+
+        raw_request = {
+            "model": self.model,
+            "temperature": 0,
+            "max_tokens": self.MAX_TOKENS_TO_SAMPLE,
+            "stop": None,  # API doesn't like empty list
+        }
+        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+        response = self.client.chat.completions.create(**{"messages": messages, **raw_request})
+        summarization = response.choices[0].message.content
+        self.log(f"\n(summarize_without_logging) New summarization: {summarization}\n")
+        return summarization
 
     ############## for actions ##############
     
@@ -564,100 +594,103 @@ Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer st
         return wrapped_complete_text_openai(**kwargs)
     
     # Function to run the OpenAI Assistants API
-    def run_assistant(self, system_prompt, user_prompt, tool_descriptions=None):
-        # Truncate user prompt if too long and add a note
-        if len(user_prompt) > self.MAX_PROMPT_TOKENS * 4:
-            user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4]
-            user_prompt += f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
-            self.log(f"\n(run_assistant) Truncated user prompt: {user_prompt}\n")
-            self.log("Assistants Truncated user prompt: ", user_prompt)
-            self.log("# of input tokens start: ", len(system_prompt + user_prompt) // 4)
-            
-        # Default tool_descriptions is the initialized one
-        if tool_descriptions is None:
-            tool_descriptions = self.tool_descriptions
+    def run_assistant(self, **kwargs):
+        @self.log_decorator
+        def wrapped_run_assistant(system_prompt, user_prompt, tool_descriptions=None, **kwargs):
+            # Truncate user prompt if too long and add a note
+            if len(user_prompt) > self.MAX_PROMPT_TOKENS * 4:
+                user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4]
+                user_prompt += f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
+                self.log(f"\n(run_assistant) Truncated user prompt: {user_prompt}\n")
+                self.log("Assistants Truncated user prompt: ", user_prompt)
+                self.log("# of input tokens start: ", len(system_prompt + user_prompt) // 4)
+                
+            # Default tool_descriptions is the initialized one
+            if tool_descriptions is None:
+                tool_descriptions = self.tool_descriptions
 
-        try:
-            # Instantiate an Assistant
-            self.assistant = self.client.beta.assistants.create(
-                name="Research Agent",
-                instructions=system_prompt,
-                tools=tool_descriptions,
-                model=self.model
-            )
-            self.thread = self.client.beta.threads.create()
-
-            # Invoke the Assistants API to answer
-            self.client.beta.threads.messages.create(
-                thread_id=self.thread.id,
-                role="user",
-                content=user_prompt
-            )
-            run = self.client.beta.threads.runs.create(
-                thread_id=self.thread.id,
-                assistant_id=self.assistant.id,
-            )
-
-            # Wait until the run has looped
-            run_complete = False
-            num_tries = 100
-            while not run_complete:
-                # Check if there's an update on the run
-                run = self.client.beta.threads.runs.retrieve(
-                    thread_id=self.thread.id,
-                    run_id=run.id
+            try:
+                # Instantiate an Assistant
+                self.assistant = self.client.beta.assistants.create(
+                    name="Research Agent",
+                    instructions=system_prompt,
+                    tools=tool_descriptions,
+                    model=self.model
                 )
-                run_complete = run.status == "completed"
-                self.log("\nrun.status: ", run.status)
+                self.thread = self.client.beta.threads.create()
 
-                # Call the tools if the run status is requires action
-                if run.status == "requires_action":
-                    tool_outputs = []
-                    for tool_call in run.required_action.submit_tool_outputs.tool_calls:
-                        tool_id, tool_function, tool_type = tool_call.id, tool_call.function, tool_call.type
-                        self.log(f"Run required action: \ntool_id: {tool_id}, \ntool_function.arguments: {tool_function.arguments}, \ntool_function.name: {tool_function.name}, \ntool_type: {tool_type}")
+                # Invoke the Assistants API to answer
+                self.client.beta.threads.messages.create(
+                    thread_id=self.thread.id,
+                    role="user",
+                    content=user_prompt
+                )
+                run = self.client.beta.threads.runs.create(
+                    thread_id=self.thread.id,
+                    assistant_id=self.assistant.id,
+                )
 
-                        # Call the function directly if `tool_function` is a callable object
-                        # and `arguments` is a dictionary of arguments to pass to the function.
-                        try:
-                            arguments = json.loads(tool_function.arguments)
-                            function_output = self.available_actions[tool_function.name](**arguments)
-                        except Exception as e:
-                            function_output = f"Tool function {tool_function.name} for tool_id {tool_id} does not exist and is not callable with arguments {tool_function.arguments}. Make sure you are using only tools listed here: {self.available_actions.keys()} with the right arguments."
-
-                        tool_outputs.append({
-                            "tool_call_id": tool_id,
-                            "output": function_output
-                        })
-
-                    # Submit tool outputs as a new run
-                    run = self.client.beta.threads.runs.submit_tool_outputs(
+                # Wait until the run has looped
+                run_complete = False
+                num_tries = 100
+                while not run_complete:
+                    # Check if there's an update on the run
+                    run = self.client.beta.threads.runs.retrieve(
                         thread_id=self.thread.id,
-                        run_id=run.id,
-                        tool_outputs=tool_outputs
+                        run_id=run.id
                     )
-                elif run.status == "failed":
-                    self.log("Run failed: ", run)
-                    completion = "Assistants API call run failed. Please try again."
-                    break
+                    run_complete = run.status == "completed"
+                    self.log("\nrun.status: ", run.status)
 
-                time.sleep(1)
-                num_tries -= 1
-                if num_tries == 0:
-                    self.log("Run timed out, cancelling...")
-                    run = self.client.beta.threads.runs.cancel(thread_id=self.thread.id, run_id=run.id)
-                    while run.status != "cancelled":
-                        run = self.client.beta.threads.runs.retrieve(
+                    # Call the tools if the run status is requires action
+                    if run.status == "requires_action":
+                        tool_outputs = []
+                        for tool_call in run.required_action.submit_tool_outputs.tool_calls:
+                            tool_id, tool_function, tool_type = tool_call.id, tool_call.function, tool_call.type
+                            self.log(f"Run required action: \ntool_id: {tool_id}, \ntool_function.arguments: {tool_function.arguments}, \ntool_function.name: {tool_function.name}, \ntool_type: {tool_type}")
+
+                            # Call the function directly if `tool_function` is a callable object
+                            # and `arguments` is a dictionary of arguments to pass to the function.
+                            try:
+                                arguments = json.loads(tool_function.arguments)
+                                function_output = self.available_actions[tool_function.name](**arguments)
+                            except Exception as e:
+                                function_output = f"Tool function {tool_function.name} for tool_id {tool_id} does not exist and is not callable with arguments {tool_function.arguments}. Make sure you are using only tools listed here: {self.available_actions.keys()} with the right arguments."
+
+                            tool_outputs.append({
+                                "tool_call_id": tool_id,
+                                "output": function_output
+                            })
+
+                        # Submit tool outputs as a new run
+                        run = self.client.beta.threads.runs.submit_tool_outputs(
                             thread_id=self.thread.id,
-                            run_id=run.id
+                            run_id=run.id,
+                            tool_outputs=tool_outputs
                         )
-                    self.log("Run cancelled!")
-                    break
-            messages = self.client.beta.threads.messages.list(thread_id=self.thread.id)
-            completion = messages.data[0].content[0].text.value
-        except Exception as e:
-            completion = f"EnvError: Assistants API call failed: {e}. Please try again or edit your files or prompt based on the error message to prevent the error from happening again."
-        return completion
+                    elif run.status == "failed":
+                        self.log("Run failed: ", run)
+                        completion = "Assistants API call run failed. Please try again."
+                        break
+
+                    time.sleep(1)
+                    num_tries -= 1
+                    if num_tries == 0:
+                        self.log("Run timed out, cancelling...")
+                        run = self.client.beta.threads.runs.cancel(thread_id=self.thread.id, run_id=run.id)
+                        while run.status != "cancelled":
+                            run = self.client.beta.threads.runs.retrieve(
+                                thread_id=self.thread.id,
+                                run_id=run.id
+                            )
+                        self.log("Run cancelled!")
+                        break
+                messages = self.client.beta.threads.messages.list(thread_id=self.thread.id)
+                completion = messages.data[0].content[0].text.value
+            except Exception as e:
+                completion = f"EnvError: Assistants API call failed: {e}. Please try again or edit your files or prompt based on the error message to prevent the error from happening again."
+            return completion
+        return wrapped_run_assistant(**kwargs)
 
     ############################## internal functions ########################################
 

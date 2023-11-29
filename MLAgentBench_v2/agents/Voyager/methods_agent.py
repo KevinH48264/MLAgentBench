@@ -44,6 +44,5 @@ History of files, action, and result:
 {self.formatted_action_history()}'''
 
         methods_agent_feedback = self.run_assistant(system_prompt=generate_plan_system_prompt, user_prompt=user_prompt, tool_descriptions=self.read_tool_description)
-        self.log("methods_agent_feedback", methods_agent_feedback)
 
         return methods_agent_feedback

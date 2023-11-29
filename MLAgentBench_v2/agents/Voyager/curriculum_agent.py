@@ -10,27 +10,29 @@ class CurriculumAgent(Agent):
 
         # The crux is a Q&A process
         # Problem with this approach is you still have to deal with searching multiple times, and continuing to search or not. Approach: Or maybe if you search and you don't have the answer, that's a bad thing to search and you need to go more specific / ask a different question!
+
+# Commenting out for now to speed up execution
+# Question 1: ...
+# Answer: ...
+# Question 2: ...
+# Answer: ...
+# Question 3: ...
+# Answer: ...
+# ...
         self.system_prompt_automatic_curriculum = f'''You are a helpful assistant that tells me the next immediate task to do. My ultimate goal is to discover as many useful pieces of information as possible to better achieve the research goal, answer as many questions as possible to get the best answer, and become the best researcher in the world in solving this research goal.
 
 Research Goal: {self.research_problem}
 
 I will give you the following information:
-Question 1: ...
-Answer: ...
-Question 2: ...
-Answer: ...
-Question 3: ...
-Answer: ...
-...
 Files: these are my current files and skills that I have in my working directory.
 Skills: these are skills that I can take action with.
 Completed tasks so far (most recent to least): ...
 Failed tasks that are too hard (most recent to least): ...
 Most recent attempted tasks, plans, results, files, and answer states (newest to oldest): Answer states are the report of the best answer I have so far to achieving the research goal, and the attempted tasks, plans, results, and files are the tasks, plans, results, and files I took and had at that point in time to update the answer state.
 
-1) You should act as a mentor and guide me to the next task based on my current learning progress. Always give me the task that will help me learn the most and reach my research goal the fastest. 
-2) Please be very specific about what information or actions I need to take and what expected results I need to achieve.
-3) The next task should follow a clear format, such as "Write [file]", "Reflect on why I'm seeing [error]", "Read [file]", "Brainstorm if ideas from [topic 1] be applied to [topic 2]", "Analyze what are the similarities between [topic 1] for success and [topic 2]" , "Reflect on what's significant about this paper: [paper]?", "Reflect on what's currently missing or preventing me from achieving [goal] better", etc. It should be a single task to collect useful information on. Do not propose multiple tasks at the same time. Do not mention anything else. 
+1) You should act as a mentor and guide me to the next task based on my current learning progress. Always give me the task that will help me learn the most and reach my research goal the fastest.
+2) Please be very specific about what information or actions I need to take and what expected results I need to achieve. Always include a brief acceptance criteria and rejection criteria for the task.
+3) The next task should follow a clear format, such as "Write [file]", "Reflect on why I'm seeing [error]", "Read [file]", "Brainstorm if ideas from [topic 1] be applied to [topic 2]", "Analyze what are the similarities between [topic 1] for success and [topic 2]" , "Reflect on what's significant about this paper: [paper]?", "Reflect on what's currently missing or preventing me from achieving [goal] better", etc. It should be a single task to collect useful information on. Do not propose multiple tasks at the same time. Do not mention anything else. Please include a brief acceptance criteria and rejection criteria for the task.
 4) The next task should not be too hard since the internet and I may not contain the full answer in a single article or have learned enough information to complete it yet. 
 5) The next task should be novel and interesting based on my current learning progress. I should look for rare and potentially useful pieces of information, upgrade my current answer using better information, and discover new things. I should not be doing the same thing over and over again.
 6) I may sometimes need to repeat some tasks or variations of the task if I need to collect more information to answer more difficult tasks. Only repeat tasks if necessary. 
@@ -41,7 +43,7 @@ RESPONSE FORMAT:
 ```json
 {{ 
     "reasoning": "<based on the information I listed above, do reasoning about what the next task should be.>",
-    "task": "<the next task.>"
+    "task": "<the next task, acceptance criteria, and rejection criteria.>"
 }}
 ```
 
@@ -49,7 +51,7 @@ Here’s an example response:
 ```json
 {{ 
     "reasoning": "We know that we have a sword and we know there's fire, and fire lights things on fire. Therefore, we could try to make a firesword.",
-    "task": "Try to make a firesword and record what happens."
+    "task": "Try to make a firesword and record what happens. Acceptance criteria: the sword is on fire. Rejection criteria: the sword is not on fire."
 }}
 ```
 
@@ -162,7 +164,8 @@ You will answer the question based on the context (only if available and helpful
         '''
         This function decomposes a goal into tasks
         '''        
-        question_answer = self.retrieve_from_wiki()
+        # question_answer = self.retrieve_from_wiki() # TODO: commented out for now for speed of testing
+        question_answer = ""
         user_prompt = f'''{question_answer}
 Files: {self.files_no_skill_lib}
 Skills: {list(self.available_actions.keys())}    

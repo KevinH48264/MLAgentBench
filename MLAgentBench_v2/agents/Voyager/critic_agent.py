@@ -56,6 +56,7 @@ History of files, action, and result: {self.formatted_action_history()}''' # Exe
 
         response_message = self.complete_text_openai(system_prompt=system_prompt, user_prompt=response_message, json_required=True)
 
+        # Just to help with debugging, can delete later
         self.log("Critic system prompt: ", system_prompt, "\n\nCritic user prompt: ", user_prompt, "\n\nTask: " + task + "\n\nCritic response: ", response_message)
 
         try:

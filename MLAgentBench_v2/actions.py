@@ -171,7 +171,7 @@ TOOL_DESCRIPTIONS = [
             "properties": {
                 "file_name": {
                     "type": "string",
-                    "description": "A valid file name with relative path to current directory if needed"
+                    "description": "A valid file name with relative path to current working directory if needed. If the file has a directory like 'skill_library/file_name' from the current working directory, then make sure to include that full relative path from the current working directory (ie. 'skill_library/file_name' instead of just 'file_name')."
                 }
             },
             "required": ["file_name"]
@@ -261,18 +261,18 @@ TOOL_DESCRIPTIONS = [
     {
         "type": "function",
         "function": {
-        "name": "executeScript",
-        "description": "Use this to execute the python script. The script must already exist.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "script_name": {
-                    "type": "string",
-                    "description": "A valid python script name with relative path to current directory if needed. You can only execute scripts and files in the current directory."
-                }
-            },
-            "required": ["script_name"]
-        }
+            "name": "executeScript",
+            "description": "Use this to execute the Python script. The script must already exist and must have a .py extension.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "script_name": {
+                        "type": "string",
+                        "description": "A valid python script name with relative path to current directory if needed. You can only execute scripts and files in the current directory."
+                    }
+                },
+                "required": ["script_name"]
+            }
         }
     },
     # {
