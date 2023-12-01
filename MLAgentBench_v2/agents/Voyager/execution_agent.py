@@ -10,16 +10,16 @@ class ExecutionAgent(Agent):
 
     def function_call(self, task, methods_prompt):
         try:
-            num_tries = 2
+            num_tries = 4
             for _ in range(num_tries):
-                system_prompt = f'''You are a helpful assistant. Your goal is to execute the given instructions and output the complete answer to the question. If the instructions don't seem reasonable or you cannot get to the complete answer, then you should give feedback on why you couldn't do it and what you tried. 
+                system_prompt = f'''You are a helpful assistant. Your goal is to execute the given instructions and output the complete answer to the question. Tell me what the result is after executing all the given instructions. If the instructions don't seem reasonable or you cannot get to the complete answer, then you should give feedback on why you couldn't do it and what you tried. You must continue from the newest history, and sometimes the history gets cut off, in which case, you can just pick up from the latest instruction that you think is reasonable instead of repeating all the instructions if you think some tasks were already completed based on the history.
 
 You will be given this information:
-Skills: these are skills that I can take action with.
-Files: these are my current files that I have in my working directory.
+Skills: these are skills that you can take action with.
+Files: these are your current files that you have in your working directory.
 Task: ...
 Instructions: ...
-History of files, action, and result (newest to oldest): By following the plan, this is my history of files, actions, and results I had and took at that point in time.'''
+History of files, action, and result (newest to oldest): ...'''
                 execute_prompt = f'''Skills: {list(self.available_actions.keys())}
 Files: {self.files}
 Task: {task}
@@ -31,7 +31,7 @@ History of files, actions, and results:
                 self.run_assistant(system_prompt=system_prompt, user_prompt=execute_prompt) # OpenAI Assistants API
 
                 # Currently the run_assistant API will not complete the instructions entirely, so this will check for task completion and then continue the assistants by running the assistants API one more time, ideally continuing the instructions.
-                check_task_completion_system_prompt = '''You are a helpful assistant. Your goal is to check if the instructions have been completed based on the history of files, actions, and results (newest to oldest) that I will give you. If based on the the recent files, actions, and results, it seems like the execution of the instructions is complete, then respond with True. Otherwise, respond with False
+                check_task_completion_system_prompt = '''You are a helpful assistant. Your goal is to check if the instructions have been fully completed based on the history of files, actions, and results (newest to oldest) that I will give you. If based on the the recent files, actions, and results, the execution of the instructions is fully complete, then respond with completed = True. Otherwise, respond with completed = False
 
     You will be given this information:
     Instructions: ...
@@ -40,6 +40,9 @@ History of files, actions, and results:
     You should only respond in JSON format as described below:
     ```json
     {
+        "completed_instructions": "<instructions completed>",
+        "uncompleted_instructions": "<instructions uncompleted>",
+        "reasoning": "<reasoning>",
         "completed": boolean,
     }
     ```

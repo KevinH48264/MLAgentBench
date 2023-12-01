@@ -188,7 +188,7 @@ Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer st
 
     def add_completed_task(self, task, methods_prompt, result):
         # TODO: probably we should record the entire answer state of files, action, output, and answer state? Or just action and output?
-        self.completed_tasks.insert(0, task)
+        self.completed_tasks.insert(0, task + result)
 
         # Experimenting with adding the task to a living skill library in workspace so the methods prompt can build off of the skills library. 
 
@@ -208,7 +208,7 @@ Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer st
         self.update_answer_state(task, methods_prompt, result)
 
     def add_failed_task(self, task, methods_prompt, result):
-        self.failed_tasks.insert(0, task) #  + " \nCritique for why it failed: " + critique -- commented this out for now to allow for all tasks to be considered by the curriculum agent without truncation
+        self.failed_tasks.insert(0, task + result) #  + " \nCritique for why it failed: " + critique -- commented this out for now to allow for all tasks to be considered by the curriculum agent without truncation
 
         # Update answer state
         self.update_answer_state(task, methods_prompt, result)

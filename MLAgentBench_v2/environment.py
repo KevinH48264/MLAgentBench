@@ -57,8 +57,8 @@ class Environment:
         )
         self.files = [os.path.relpath(os.path.join(root, file), self.work_dir) for root, dirs, files in os.walk(self.work_dir) for file in files] # Include skill library files for now
         self.files_no_skill_lib = os.listdir(self.work_dir) # temporary to not give the curriculum agent the skill library to see if it can come up with better ideas
-        self.max_states = 16
-        self.max_history = 16
+        self.max_states = 32
+        self.max_history = 32
         self.answer_states = [{
             "attempted_task": "None",
             "plan": "None",
@@ -180,8 +180,8 @@ class Environment:
                 result = "LLMError: " + e.message
                 self.log("--- TOOL ERROR ---", e)
             except EnvException as e:
-                result = "EnvError: " + e.message
-                self.log("--- TOOL ERROR ---", e)
+                result = "EnvError: " + e.message.replace(self.work_dir, '.')
+                self.log("--- TOOL ERROR ---", e.message)
             except TypeError as e:
                 invalid_action_error = f"The arguments needs to have proper entries. You may have missed some entries or used inappropriate ones. Please use the correct format and try again.\n{e}"
                 result = "EnvError: " + invalid_action_error
@@ -231,7 +231,7 @@ class Environment:
                 # Log most recent state
                 self.log(f"\nStep: {self.num_steps}\nfiles_action_result_history latest addition:\n{json.dumps(self.files_action_result_history[0], indent=4)}\n")
             else:
-                # Log most recent action and result for debuggomg
+                # Log most recent action and result for debugging
                 self.log(f"\n\n--- Step: {self.num_steps} not recorded in history\n\n--- Step Action: Calling function {func.__name__}(args = {args}, kwargs = {kwargs})\n\n--- Step Result: {result}\n")
             return result
         return wrapper
@@ -322,16 +322,40 @@ Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer st
             user_prompt = user_prompt[:self.MAX_PROMPT_TOKENS * 4] + f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
             self.log(f"\n(summarize_without_logging) Truncated user prompt: {user_prompt}\n")
 
-        raw_request = {
-            "model": self.model,
-            "temperature": 0,
-            "max_tokens": self.MAX_TOKENS_TO_SAMPLE,
-            "stop": None,  # API doesn't like empty list
-        }
-        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
-        response = self.client.chat.completions.create(**{"messages": messages, **raw_request})
-        summarization = response.choices[0].message.content
-        self.log(f"\n(summarize_without_logging) New summarization: {summarization}\n")
+        try:
+            raw_request = {
+                "model": self.model,
+                "temperature": 0,
+                "max_tokens": self.MAX_TOKENS_TO_SAMPLE,
+                "stop": None,  # API doesn't like empty list
+            }
+            messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
+            response = self.client.chat.completions.create(**{"messages": messages, **raw_request})
+            summarization = response.choices[0].message.content
+            self.log(f"\n(summarize_without_logging) New summarization: {summarization}\n")
+        except TooLongPromptError:
+            summarization = f"EnvError: too long input.\n{e}" 
+            self.log("--- SUMMARIZATION ERROR ---", e)
+        except LLMError as e:
+            summarization = "LLMError: " + e.message
+            self.log("--- SUMMARIZATION ERROR ---", e)
+        except EnvException as e:
+            summarization = "EnvError: " + e.message
+            try:
+                self.log("--- SUMMARIZATION ERROR ---", e.message.replace(self.work_dir, '.'))
+            except:
+                self.log("--- SUMMARIZATION ERROR ---", e)
+        except TypeError as e:
+            invalid_action_error = f"The arguments needs to have proper entries. You may have missed some entries or used inappropriate ones. Please use the correct format and try again.\n{e}"
+            summarization = "EnvError: " + invalid_action_error
+            self.log("--- SUMMARIZATION ERROR ---", e)
+        # except TimeoutException as e:
+        #     raise e
+        #     self.log("--- TOOL ERROR ---", e)
+        except Exception as e:
+            summarization = f"EnvError: \n{e}"
+            self.log("--- SUMMARIZATION ERROR ---", e)
+
         return summarization
 
     ############## for actions ##############
@@ -377,8 +401,11 @@ Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer st
                 if len(observation) > self.MAX_PROMPT_TOKENS * 4: # Auto-truncate if too long
                     observation = observation[:self.MAX_PROMPT_TOKENS * 4] + f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
                 return observation
-            except:
-                raise EnvException(f"cannot read file {file_name}")
+            except Exception as e:
+                try:
+                    raise EnvException(f"cannot read file {file_name}: {e.replace(self.work_dir, '.')}")
+                except:
+                    raise EnvException(f"cannot read file {file_name}: {e}")
         return wrapped_read_file(**kwargs)
 
     def write_file(self, **kwargs):
@@ -400,8 +427,11 @@ Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer st
                     f.write(content)
                 observation = f"File {file_name} written successfully."
                 return observation
-            except:
-                raise EnvException(f"cannot write file {file_name}")
+            except Exception as e:
+                try:
+                    raise EnvException(f"cannot write file {file_name}: {e.replace(self.work_dir, '.')}")
+                except:
+                    raise EnvException(f"cannot write file {file_name}: {e}")
         return wrapped_write_file(**kwargs)
 
     # TODO: add the "check_file_in_work_dir" function from before
@@ -433,18 +463,25 @@ Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer st
                 )
                 stdout, stderr = process.communicate()  # This waits for the process to finish and gets the output
 
+                # Sometimes there is no output, therefore, we append the code as well as the message to the output for more information
+                observation = open(os.path.join(work_dir, script_name)).read()
+                if len(observation) > self.MAX_PROMPT_TOKENS * 4: # Auto-truncate if too long
+                    observation = observation[:self.MAX_PROMPT_TOKENS * 4] + f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
                 if process.returncode != 0:
                     # Handle error
                     error_message = "Error executing the script: " + stderr
                     self.log(error_message)
-                    return error_message
+                    return error_message + "\nExecuted file contents: \n" + observation
                 else:
                     # Success
                     success_message = "Script output: " + stdout
                     self.log(success_message)
-                    return success_message
+                    return success_message + "\nExecuted file contents: \n" + observation
             except Exception as e:
-                raise EnvException(f"Something went wrong in executing {script_name}: {e}. Please check if it is ready to be executed.")
+                try:
+                    raise EnvException(f"Something went wrong in executing {script_name}: {e.replace(self.work_dir, '.')}. Please check if it is ready to be executed.")
+                except:
+                    raise EnvException(f"Something went wrong in executing {script_name}: {e}. Please check if it is ready to be executed.")
 
 
 
@@ -678,11 +715,13 @@ Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer st
                     if num_tries == 0:
                         self.log("Run timed out, cancelling...")
                         run = self.client.beta.threads.runs.cancel(thread_id=self.thread.id, run_id=run.id)
-                        while run.status != "cancelled":
+                        while run.status == "in_progress":
                             run = self.client.beta.threads.runs.retrieve(
                                 thread_id=self.thread.id,
                                 run_id=run.id
                             )
+                            # TODO: Looks like there's an error here where the status doesn't turn to cancelled?
+                        completion = "Execution timed out. Please try again."
                         self.log("Run cancelled!")
                         break
                 messages = self.client.beta.threads.messages.list(thread_id=self.thread.id)

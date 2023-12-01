@@ -40,7 +40,7 @@ class VoyagerAgent(Agent):
         self.log("Starting to run Voyager Agent")
 
         # Running a cycle of Voyager
-        num_rounds = 2 # Just to test if it can give easier tasks too
+        num_rounds = 4 # Just to test if it can give easier tasks too
         max_tasks = 25
 
         for task_idx in range(self.num_tasks, max_tasks):
@@ -72,6 +72,10 @@ class VoyagerAgent(Agent):
                 self.log("\nStarting critic agent")
                 success, critique = self.critic_agent.check_task_success(task=next_task, methods_prompt=methods_prompt, execution_feedback=execution_feedback)
                 self.log("Critic agent output", "\nOriginal task: ", next_task, "\nSuccess: ", success, "\nEvaluation: ", critique)
+
+                # TODO: Make grading fast and easier to look at
+                # if i == len(num_rounds) - 1:
+                # create 1) new log that only logs the final critic agent user prompt (so you know the history) and the critic output / evaluation and 2) a collection of all critic outputs & tasks to figure out why it went wrong, and perhaps 3) an automatic initial evaluation of what you think the agent system struggled with based on the critic user prompt and evaluation.
 
                 if success:
                     break
