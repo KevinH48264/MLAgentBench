@@ -158,7 +158,7 @@ class Environment:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # Update files
-            self.files = [os.path.relpath(os.path.join(root, file), self.work_dir) for root, dirs, files in os.walk(self.work_dir) for file in files] # Include skill library files for now
+            self.files = [os.listdir(self.work_dir)] # Include skill library files for now
             kwargs['work_dir'] = self.work_dir # Update to actual work_dir
             assert(kwargs['work_dir'] == self.work_dir) # Ensure that the work_dir sent into any function is the work directory and nothing else
             update_history = kwargs.get('update_files_action_result_history', True)
@@ -177,11 +177,11 @@ class Environment:
                 result = f"EnvError: too long input for the tool.\n{e}" 
                 self.log("--- TOOL ERROR ---", e)
             except LLMError as e:
-                result = "LLMError: " + e.message
+                result = "LLMError: " + str(e)
                 self.log("--- TOOL ERROR ---", e)
             except EnvException as e:
-                result = "EnvError: " + e.message.replace(self.work_dir, '.')
-                self.log("--- TOOL ERROR ---", e.message)
+                result = "EnvError: " + str(e).replace(self.work_dir, '.')
+                self.log("--- TOOL ERROR ---", str(e))
             except TypeError as e:
                 invalid_action_error = f"The arguments needs to have proper entries. You may have missed some entries or used inappropriate ones. Please use the correct format and try again.\n{e}"
                 result = "EnvError: " + invalid_action_error
@@ -247,7 +247,7 @@ class Environment:
         # Update files
         self.files = [os.path.relpath(os.path.join(root, file), self.work_dir) for root, dirs, files in os.walk(self.work_dir) for file in files] # Include skill library files for now
 
-        system_prompt = '''You are a helpful assistant and first-rate researcher. Given a research goal, your goal is to improve your answer state.
+        system_prompt = '''You are a helpful assistant that tells me the next immediate task to do. My ultimate goal is to achieve the research goal as quick as possible and produce answers that are better than myself and anyone else -- effectively becoming the best researcher in the world in solving this research goal. Given a research goal, tools, files, most recently attempted task, the plan, the result, and previous answer states, your goal is to update my answer state so that it best positions me to continually get the best answer possible. You can choose what states is best to keep track of all in your answer state that you think would be most useful (ex. state of best approaches and results so far, state of plans, state of problems, etc.)
 
 You will be given this information:
 Research Goal: ...
@@ -256,9 +256,9 @@ Attempted Task: Task to accomplish to better achieve the research goal
 Plan: Plan to accomplish the task
 Result: Evaluation after executing plan
 Files: Files after executing plan
-Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer states (newest to oldest): ...
+Most recent answer states (newest to oldest): ...
 
-You should then respond to me with 1) your best answer given the new attempted task, plan, result, and files, 2) specific problems that still exist, and 3) a plan containing approaches to potentially solve those problems.
+You should then respond to me with only your updated answer state.
 '''
 
         user_prompt = f'''Research Goal: {self.research_problem}
@@ -267,7 +267,7 @@ a) Attempted Task: {attempted_task}
 b) Plan: {plan}
 c) Result: {result}
 d) Files: {self.files}
-Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer states (newest to oldest): 
+Most recent answer states (newest to oldest): 
 {self.formatted_answer_states()}
 '''
 
@@ -337,12 +337,12 @@ Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer st
             summarization = f"EnvError: too long input.\n{e}" 
             self.log("--- SUMMARIZATION ERROR ---", e)
         except LLMError as e:
-            summarization = "LLMError: " + e.message
+            summarization = "LLMError: " + str(e)
             self.log("--- SUMMARIZATION ERROR ---", e)
         except EnvException as e:
-            summarization = "EnvError: " + e.message
+            summarization = "EnvError: " + str(e)
             try:
-                self.log("--- SUMMARIZATION ERROR ---", e.message.replace(self.work_dir, '.'))
+                self.log("--- SUMMARIZATION ERROR ---", str(e).replace(self.work_dir, '.'))
             except:
                 self.log("--- SUMMARIZATION ERROR ---", e)
         except TypeError as e:
@@ -816,11 +816,11 @@ Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer st
         formatted_answer_states = ""
         for idx, answer_state in enumerate(self.answer_states):
             formatted_answer_states += "\nStep: " + str(len(self.answer_states) - 1 - idx) 
-            formatted_answer_states += "\na) Attempted Task: " + str(answer_state['attempted_task']) 
-            formatted_answer_states += "\nb) Plan: " + str(answer_state['plan']) 
-            formatted_answer_states += "\nc) Result: " + str(answer_state['result']) 
-            formatted_answer_states += "\nd) Files: " + str(answer_state['files']) 
-            formatted_answer_states += "\ne) Answer State: " + str(answer_state['answer_state']) 
+            # formatted_answer_states += "\na) Attempted Task: " + str(answer_state['attempted_task']) 
+            # formatted_answer_states += "\nb) Plan: " + str(answer_state['plan']) 
+            # formatted_answer_states += "\nc) Result: " + str(answer_state['result']) 
+            # formatted_answer_states += "\nd) Files: " + str(answer_state['files']) 
+            formatted_answer_states += "\nAnswer State: " + str(answer_state['answer_state']) 
         return formatted_answer_states
     
     def formatted_action_history(self):

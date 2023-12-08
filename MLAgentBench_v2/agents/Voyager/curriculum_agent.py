@@ -1,3 +1,5 @@
+# Note: incomplete update of answer_state in wiki
+
 from MLAgentBench_v2.agents.agent import Agent
 import json
 import re
@@ -19,7 +21,7 @@ class CurriculumAgent(Agent):
 # Question 3: ...
 # Answer: ...
 # ...
-        self.system_prompt_automatic_curriculum = f'''You are a helpful assistant that tells me the next immediate task to do. My ultimate goal is to discover as many useful pieces of information as possible to better achieve the research goal, answer as many questions as possible to get the best answer, and become the best researcher in the world in solving this research goal.
+        self.system_prompt_automatic_curriculum = f'''You are a helpful assistant that tells me the next immediate task to do. My ultimate goal is to achieve the research goal as quick as possible and produce answers that are better than myself and anyone else -- effectively becoming the best researcher in the world in solving this research goal.
 
 Research Goal: {self.research_problem}
 
@@ -28,7 +30,7 @@ Files: these are my current files and skills that I have in my working directory
 Skills: these are skills that I can take action with.
 Completed tasks so far (most recent to least): ...
 Failed tasks that are too hard (most recent to least): ...
-Most recent attempted tasks, plans, results, files, and answer states (newest to oldest): Answer states are the report of the best answer I have so far to achieving the research goal, and the attempted tasks, plans, results, and files are the tasks, plans, results, and files I took and had at that point in time to update the answer state.
+Most recent answer states (newest to oldest): Answer states are the report of states that I think is best to track so far to best achieve the research goal, given the attempted task, plan, and result that I had at that point in time.
 
 1) You should act as a mentor and guide me to the next task based on my current learning progress. Always give me the task that will help me learn the most and reach my research goal the fastest.
 2) Please be very specific about what information or actions I need to take and what expected results I need to achieve. Always include a brief acceptance criteria and rejection criteria for the task.
@@ -42,7 +44,10 @@ Most recent attempted tasks, plans, results, files, and answer states (newest to
 RESPONSE FORMAT: 
 ```json
 {{ 
-    "reasoning": "<based on the information I listed above, do reasoning about what the next task should be.>",
+    "research_goal": "<re-iterate the research goal so you understand the problem.>",
+    "observations": "<observations about anything that might be useful.>",
+    "reasoning": "<reasons about why the observations might be useful.>",
+    "complete_plan": "<the best complete plan to increase the likelihood of me achieving the research goal quickly and better than anyone else.>"
     "task": "<the next task, acceptance criteria, and rejection criteria.>"
 }}
 ```
@@ -50,7 +55,10 @@ RESPONSE FORMAT:
 Here’s an example response: 
 ```json
 {{ 
-    "reasoning": "We know that we have a sword and we know there's fire, and fire lights things on fire. Therefore, we could try to make a firesword.",
+    "research_goal": "To learn as much as possible in the world of Minecraft",
+    "observations": "You have acquired most of the existing known items. I also see that there's lava on the ground, and there's a sword in my inventory, that could be interesting.",
+    "reasoning": "Because I'm on the cutting edge of what's known, I can try and experiment with potentially new things to try discovering new things. We know that we have a sword and we know there's fire, and fire lights things on fire. Therefore, we could try to make a firesword.",
+    "complete_plan": "1. First try to make a firesword. 2. If that works, then come up with ideas about what you can do with your new firesword. 3. If that doesn't work, then come up with ideas about what else you can do that would be new. (Ex. What else might you be able to do with lava? What else might you be able to do with a sword?)"
     "task": "Try to make a firesword and record what happens. Acceptance criteria: the sword is on fire. Rejection criteria: the sword is not on fire."
 }}
 ```
@@ -80,7 +88,7 @@ Files: these are my current files and skills that I have in my working directory
 Skills: these are skills that I can take action with.
 Completed tasks so far (most recent to least): ...
 Failed tasks that are too hard (most recent to least): ...
-Most recent attempted tasks, plans, results, files, and answer states (newest to oldest): Answer states are the report of the best answer I have so far to achieving the research goal, and the attempted tasks, plans, results, and files are the tasks, plans, results, and files I took and had at that point in time to update the answer state.
+Most recent answer states (newest to oldest): Answer states are the report of states that I think is best to track so far to best achieve the research goal, given the attempted task, plan, and result that I had at that point in time.
 
 You must follow the following critiera:
 1) You should ask at least 5 questions (but no more than 10 questions) to help me decide the next immediate task to do. Each question should be followed by the concept that the question is about.
@@ -131,7 +139,7 @@ Ensure the response can be parsed by Python "json.loads", e.g.: no trailing comm
 Skills: {list(self.available_actions.keys())}    
 Completed tasks so far: {self.completed_tasks}
 Failed tasks that are too hard: {self.failed_tasks}
-Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer states (newest to oldest)
+Most recent answer states (newest to oldest)
 {self.formatted_answer_states()}'''
         
         questions_and_concepts = self.complete_text_openai(system_prompt=asking_questions_system_prompt, user_prompt=asking_questions_user_prompt, json_required=True, update_files_action_result_history=False)
@@ -167,11 +175,11 @@ You will answer the question based on the context (only if available and helpful
         # question_answer = self.retrieve_from_wiki() # TODO: commented out for now for speed of testing
         question_answer = ""
         user_prompt = f'''{question_answer}
-Files: {self.files_no_skill_lib}
+Files: {self.files}
 Skills: {list(self.available_actions.keys())}    
 Completed tasks so far: {self.completed_tasks}
 Failed tasks that are too hard: {self.failed_tasks}
-Most recent a) attempted tasks, b) plans, c) results, d) files, and e) answer states (newest to oldest):
+Most recent answer states (newest to oldest):
 {self.formatted_answer_states()}''' # TODO: Should I add formatted_action_history which includes tactical steps that were taken?
         
         self.log("System prompt for generating curriculum: \n", self.system_prompt_automatic_curriculum, "\n User prompt: ", user_prompt)

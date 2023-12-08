@@ -41,7 +41,7 @@ class VoyagerAgent(Agent):
 
         # Running a cycle of Voyager
         num_rounds = 4 # Just to test if it can give easier tasks too
-        max_tasks = 25
+        max_tasks = 3
 
         for task_idx in range(self.num_tasks, max_tasks):
             self.log(f"\nTask {task_idx} of {max_tasks}")
