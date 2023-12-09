@@ -158,7 +158,7 @@ class Environment:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # Update files
-            self.files = [os.listdir(self.work_dir)] # Include skill library files for now
+            self.files = [os.listdir(self.work_dir)] # Include skill library files for now # TODO: Just for Eureka so it doesn't see everything. Old used to be self.files in init()
             kwargs['work_dir'] = self.work_dir # Update to actual work_dir
             assert(kwargs['work_dir'] == self.work_dir) # Ensure that the work_dir sent into any function is the work directory and nothing else
             update_history = kwargs.get('update_files_action_result_history', True)
@@ -471,12 +471,14 @@ Most recent answer states (newest to oldest):
                     # Handle error
                     error_message = "Error executing the script: " + stderr
                     self.log(error_message)
-                    return error_message + "\nExecuted file contents: \n" + observation
+                    return error_message
+                    # + "\nExecuted file contents: \n" + observation
                 else:
                     # Success
                     success_message = "Script output: " + stdout
                     self.log(success_message)
-                    return success_message + "\nExecuted file contents: \n" + observation
+                    return success_message
+                    #  + "\nExecuted file contents: \n" + observation
             except Exception as e:
                 try:
                     raise EnvException(f"Something went wrong in executing {script_name}: {e.replace(self.work_dir, '.')}. Please check if it is ready to be executed.")

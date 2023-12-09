@@ -1,0 +1,100 @@
+Features
+- Initial_system_prompt
+    - Policy model x5
+        - Prompt to include instructions to write a best answer (Variation of system prompt can allow for reasoning too, so ask for reasoning, then code in JSON)
+        - Sample 5 different actions (variation can be to improve them too because they might not run [incorrect])
+    - MCTS
+        - Run them (variation can be CoT them for expected value / net upside OR take a answer by elimination by just taking whichever one is objectively better until you have a few that are all pretty good)
+        - Take the best expected value and save outputs, code, and WHY it worked and where it failed
+- Reward_reflection_and_feedback
+    - Policy model x5
+        - Prompt to include instructions to reward reflect and feedback
+        - Sample 5 different actions
+    - MCTS
+        - Run them (variation can be CoT them)
+        - Take the best expected value and save outputs, code, and WHY it worked and where it failed
+- Problems / questions
+    1. How do we evaluate? -- this is actually a hard part. 
+    2. I generally have to install all the packages. Should I have the LLM be able to do that?
+
+System design for MLAgentBench
+1. Env for model = workspace
+2. System
+A) Initial_system_prompt
+
+System prompt = 
+You are a machine learning engineer trying to write machine learning code to solve machine learning tasks as effectively as possible.
+
+Your goal is to write a machine learning script for the environment that will help the model achieve the highest accuracy possible on the research task described in text.
+
+For evaluation, ensure that the machine learning script outputs the validation MAE (not MAE using log values but normal values).
+
+I will give you the following information:
+Research task: ...
+Files: these are the current files and its contents that you have in your working directory to work with
+
+The output format must be only executable python code, no conversation or explanation.
+
+User prompt = 
+Research task: {copy and paste the description from Kaggle}
+Files: 
+1. Filename: ...
+Content: ...
+2. ...
+
+b) Sample 5 different actions
+Run system and user prompt in chat completions with high max_tokens (4096), temperature = 1.0, top_p = 1.0, update_files_action_result_history = False
+
+c) Run them
+Use execute_script
+
+d) Take the best expected value, save output, code, and an explanation of why it was good, and why it was bad.
+1. Use chat_completion to 1) ensure that the code outputs the validation MAE and then 2) extract the validation MAE if it exists.
+2. Sort all the results
+3. Use chat completion to add more feedback about why the code was good and why it was bad.
+
+B) Reward_reflection_and_feedback
+System prompt = 
+We trained a machine learning model using the provided machine learning script and calculated the validation MAE and provided feedback:
+<REWARD REFLECTION INCLUDING VALIDATION MAE HERE>
+
+Please carefully analyze the MAE and feedback and provide a new, improved machine learning script that can better solve the task.
+
+Your goal is to write a machine learning script for the environment that will help the model achieve the highest accuracy possible on the research task described in text.
+
+For evaluation, ensure that the machine learning script outputs the validation MAE (not MAE using log values but normal values).
+
+I will give you the following information:
+Research task: ...
+Files: these are the current files and its contents that you have in your working directory to work with
+
+Please analyze each existing component of the code as suggested by the feedback, and then write the machine learning script. 
+
+The output format should be JSON. 
+Example:
+```json
+{
+    "analysis": "<insert analysis based on feedback>",
+    "code": "<insert python executable code>"
+}
+
+```
+
+User prompt = 
+Research task: {copy and paste the description from Kaggle}
+Machine learning script: ...
+Files: 
+1. Filename: ...
+Content: ...
+2. ...
+
+b) Sample 5 different actions
+Run system and user prompt in chat completions with high max_tokens (4096), temperature = 1.0, top_p = 1.0, update_files_action_result_history = False
+
+c) Run them
+Use execute_script
+
+d) Take the best expected value, save output, code, and an explanation of why it was good, and why it was bad.
+1. Use chat_completion to 1) ensure that the code outputs the validation MAE and then 2) extract the validation MAE if it exists.
+2. Sort all the results
+3. Use chat completion to add more feedback about why the code was good and why it was bad.
