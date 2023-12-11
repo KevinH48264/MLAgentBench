@@ -1,0 +1,48 @@
+Purpose: To combine the best parts of Eureka and Voyager to improve the research agent in trying to beat SOTA for a research task (Kaggle competition in this case).
+
+Features:
+F0. Reward / Eval -- Research goal or subgoal
+OPEN QUESTION:
+Q1: How do you know when you should optimize for the research goal vs subgoal?
+
+F1. State representation -- embeddings
+a) reward goal, measurement
+b) best answer so far?
+c) some ideas to improve best answer / plan
+d) memory -- useful info, query-able? skill library?
+OPEN QUESTIONS:
+Q1. What's the best state representation to achieve a research goal? What if Memory should only come in during MCTS?
+Q2: What's the role of the skill library?
+Q3: How much info should you add to not limit the creative gradient descent process too?
+
+F2. Policy model
+a) GPT / LLM -- extract the most important features and interactions between them to optimize towards reward goal
+b) sampling multiple actions from the logits
+
+F3. MCTS
+for each sample
+a) calculate 1. uncertainty, 2. expected gain, and 3. expected loss
+b) reduce uncertainty
+b.1) Voyager's iterative prompting mechanism
+c) once uncertainty is reduced to a certain threshold or you run out of energy, then return all 3 results for each sample
+OPEN QUESTIONS:
+Q1) For decreasing uncertainty, do you just use CoT + querying memory + querying any useful info?
+q2) How do we integrate long term planning in this? Is COT really just long term thinking? Does the LLM already understand what "long term planning" looks like and how to optimize for that?
+Q3) how do you enable some analysis? Do you create a flow chart of all possible actions? What if an option is to train XYZ model, but ideally you want to compare to all the other models you've already tried to see if this new one will be better. How can this MCTS system support that kind of analysis? To write a table, does that require itself to be another goal? Or a skill? How can it be queried from the memory without being forgotten (like high importance score?) -- because it's something to be maintained too. Maybe writing it down as a file could be nice? I'm not sure. Or I guess if it's not written down, it usually is forgotten, even in my head.
+Q4) Even when trying other stuff, do you really want to "ignore" the other options you tried or do you want to keep those in memory as you're evaluating? In which case it's essentially like a partial BFS before going down.
+Q5) Do we want memory retrieval via Q&A memory and RAG to help decrease certainty? Like clarifying questions? 
+
+F4. Choosing action with the highest expected value to produce a new state
+a) choose the "best" -- highest EV action based on the 3 results from all samples, rely on the model's modeling of all these to try to optimize for the highest EV action and probably just use majority? Or just sample with temperature = 0.
+
+F5. Execute and update state
+
+F6. Repeat back at step 0 with new state and perhaps updated reward / task
+
+Resources
+1. Voyager code
+2. Eureka code
+
+Most important problem:
+1. What's the status on all these parts? What have I noticed? What's the best implementation so far? 
+A: Probably Voyager, but it's definitely missing like the MCTS. TODO: MCTS the Planner! Sample a bunch! Do Q&A to decrease uncertainty. Important question: once you go down one rabbit hole -- how far down do you go?? Or do you just project / expect at that point?

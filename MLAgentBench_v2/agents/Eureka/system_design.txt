@@ -16,6 +16,8 @@ Features
 - Problems / questions
     1. How do we evaluate? -- this is actually a hard part. 
     2. I generally have to install all the packages. Should I have the LLM be able to do that?
+    3. How do I represent state best? 
+    A: I think have 2 parts (1 short term memory, and 2 best current state / answer [a way for handcrafted organization that won't be easily found from training] -- kept separately, but both added as a state)
 
 System design for MLAgentBench
 1. Env for model = workspace
@@ -77,7 +79,6 @@ Example:
     "analysis": "<insert analysis based on feedback>",
     "code": "<insert python executable code>"
 }
-
 ```
 
 User prompt = 
