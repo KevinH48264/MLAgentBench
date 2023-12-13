@@ -4,10 +4,12 @@ With 79 explanatory variables describing (almost) every aspect of residential ho
 
 Evaluation
 Goal
-It is your job to predict the sales price for each house. For each Id in the test set, you must predict the value of the SalePrice variable. You want a train and validation MAE of lower than 15,000 and there should be a submission.csv containing predictions for test.csv ready to submit.
+It is your job to predict the sales price for each house. For each Id in the test set, you must predict the value of the SalePrice variable. 
+
+You want a train and validation MAE of lower than 11,000 and there should be a submission.csv containing predictions for test.csv ready to submit.
 
 Metric
-Submissions are evaluated on Root-Mean-Squared-Error (RMSE) between the logarithm of the predicted value and the logarithm of the observed sales price. (Taking logs means that errors in predicting expensive houses and cheap houses will affect the result equally.)
+Submissions are evaluated on Mean-Absolute-Error (MAE) between the predicted value and the observed sales price.
 
 Submission File Format
 The file should contain a header and have the following format:

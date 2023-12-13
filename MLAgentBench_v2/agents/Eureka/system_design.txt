@@ -99,3 +99,57 @@ d) Take the best expected value, save output, code, and an explanation of why it
 1. Use chat_completion to 1) ensure that the code outputs the validation MAE and then 2) extract the validation MAE if it exists.
 2. Sort all the results
 3. Use chat completion to add more feedback about why the code was good and why it was bad.
+
+
+Research
+1. Why isn't Eureka able to improve beyond run 3 in v7?
+Theory behind Eureka: a language model has sufficient interaction term modeling, that given a clear research goal, it can optimize the code towards that research goal based on its modeling landscape of interaction terms and what directions might be most desirable.
+
+Reason 6: There's a lack of systematic thinking
+- Theory / hypothesis:
+Systematic thinking means “think step by step” — not just that, but think step by step as much as possible.
+“Always think” — were you systematic enough? How could you have been more systematic? Could you possibly have missed anything that could be better / more useful? Isn't this using the process of elimination? 
+It means starting from first principles of what you’re most certain about (input data), delineating all the possibilities / options via research / and trying to min max the expected value
+Then you see how much someone says matches with your world view, and try to think about how that could be wrong — a fear of rejection essentially
+What does this look like tactically?
+- Approach: Keeping track of everything tried and what could've been possibly missed. Essentially an answer state, but in a flow diagram (that I maintain). The evaluation must be rooted in first principles of what you're most certain about (input data), and then trying to min max the expected value (probability true * how much it could improve). Think about how it could be right and the impact of it being right, and how it could be wrong and the impact of it being wrong.
+    - Tactically, this looks like giving an experimental flow to the agent, and having the agent 1) figure out how to improve what to try / what's missing, 2) if what's missing is reasonably better than what's already been tried and why, 3) making a choice about one change to make to the code to test, 4) updated code, and 5) updated experimental flow.
+    - The experimental flow would just break down the machine pipeline into parts, and just track what's been tried, and the result. 
+    - Whenever there's an improvement in architecture somehow, then the experimental flow restarts because the state has been updated.
+Old script prompting:
+{{
+    "potential_problems": "<insert analysis of potential problems based on code and result>",
+    "potential_improvements": "<insert analysis of potential specific improvements to test>",
+    "code": "<insert complete python executable code with improvements made>"
+}}
+Ctrl+F "Raw output:" to find what the response is
+- Notes: 
+    - The systematic summary is pretty much an automated process of elimination type deal and just someone systemizing and organizing what has been done. Not that as options are listed, the expected value calculations need to be reasonably done and also might require research itself.
+    - This can be useful for the Voyager when trying to decide tasks too!
+    - Even trying to figure out WHY an attempt didn't work requries systematic thinking GAH! Is this really just ToT??
+
+
+Reason 4: Model training and testing is too long!! Not enough trials! note that you actually want a better way to evaluate instead of actually training the model because actually training the model takes a long time too. Especially because sometimes models with 1000 parameters in XGBoost have already taken half an hour to train and we don't need to try that again. This does place more of an emphasis on targetted learning though like Voyager instead of head bashing like Eureka.
+- Approach: Add a note that long training times should not be executed or added, but should only be scaled up at the end, which can be included as a comment. This should also be fixed with curriculum learning?
+
+Reason 3: It doesn't know what it's already tried that didn't work, therefore it just keeps trying and repeating the same mistakes. NOT LEARNING.
+- Approach: Add memory as a part of evaluation because we don't necessarily want to execute everything. This should be fine? People generally still come up with the same ideas that have already been tried. As long as during MCTS evaluation, these things that can be tried can be easily compared against and judged if it should be executed.
+
+Reason 5: No realization of what's actually the most important features. OverCond is the most important feature but even from curriculum learning eureka style this isn't discovered. This is indeed discovered by the Voyager feature_importance.py script though. (Actually Voyager had overall quality not overall condition as a top feature. Unsure what the difference here was) 
+
+
+Solved reasons:
+Reason 2: The rules aren't clear (RMSE vs MAE) -- fixed this
+
+Reason 1: It analyzed the code and result for feedback, but it's still to general so that it just implements a little bit and doesn't beat SOTA.
+- Should there be an ability for it to keep iterating if it thinks it might be more promising than other directions?
+- It probably wasn't going to really work anyway.
+
+Reason 0: Maybe there aren't enough sub goals to be optimized towards?
+- Approach: We can implement curriculum learning? But I'm not exactly sure what the code should optimize for? Great data pre-processing? Great feature engineering? Great model selection? Great post-processing? Great overall optimization and engineering. How do we know when to move on though? I suppose the model can decide based on majority vote (a large array of reason why and why not, and then deciding on what the range is)
+- 12/11/23 Experiment: I can be the curriculum agent and test this? That’s what Eureka folks did
+    - Result: This didn't really work that well. Still got bad results. Essentially, it's not able to systematically plan and go through each steps. Taking a "close" look at the existing code and what might be wrong about it. This becomes Reason 6.
+
+
+Resources:
+- A notebook that actually has a MAE that's lower (13559, val = 13885): https://www.kaggle.com/code/abhishekaggarwal896/simple-top-1-percent-kaggle-house-competition/notebook
