@@ -1,0 +1,244 @@
+['''Read 'data_description.txt' and summarize the information about each variable. Acceptance criteria: A summary that includes the type, description, and any notable details about each variable. Rejection criteria: A summary that lacks clear descriptions or omits significant details about the variables.
+                                    
+Evidence: There is now a data_description_vars.txt file.
+
+Counter evidence: 
+
+Reasoning: Because there's a data_description_vars.txt file, we have successfully completed the task
+
+Critique:''', 
+'''Perform exploratory data analysis on 'train.csv'. Acceptance criteria: A report with descriptive statistics, distribution of the target variable, identification of outliers, and visualization of relationships between features and the target variable. Rejection criteria: Lack of descriptive statistics, no analysis of target variable distribution, failure to identify outliers, or absence of feature-to-target visualizations.
+
+Evidence: There are a lot of figures in the directory comparing each figure. There is also evidence of a eda.py script being executed and generating descriptive statistics. 
+
+Counter evidence: 
+
+Reasoning: Because there's a report with description statistics, distirbution of target variable, identificaiton of outliers, and visualizations, we have successfully completed the task
+
+Critique:''', '''Read 'skill_library\missingvalueshandling_traincsv.txt' and create a plan to handle missing values in 'train.csv'. Acceptance criteria: A detailed plan for handling missing values, including methods for imputation or removal, and justification for the chosen methods. Rejection criteria: A plan that lacks detail, does not consider the nature of the missing data, or fails to justify the chosen methods.
+
+Evidence: There is a missing_values_plan.txt file.
+
+Counter evidence: 
+
+Reasoning: Because there's a missing_values_plan.txt file, we have successfully completed the task
+
+Critique:''','''Execute the missing values handling plan on 'train.csv'. Acceptance criteria: A 'train.csv' file with missing values handled according to the plan, with no missing values left. Rejection criteria: The 'train.csv' file still contains missing values or the handling methods do not align with the plan.
+
+Evidence: There is a train_cleaned.csv file.
+
+Counter evidence: 
+
+Reasoning: Because there's a train_cleaned.csv file, we have successfully completed the task
+
+Critique:
+''', '''Read 'skill_library\categoricalvarsencodingplan.txt' and create a plan to encode categorical variables in 'train_cleaned.csv'. Acceptance criteria: A detailed plan for encoding categorical variables, including the choice of encoding methods and justification for each. Rejection criteria: A plan that lacks detail, does not consider the nature of the categorical data, or fails to justify the chosen encoding methods.
+
+Evidence: There is a categorical_encoding_plan.txt file.
+
+Counter evidence: 
+
+Reasoning: Because there's a categorical_encoding_plan.txt file, we have successfully completed the task
+
+Critique:''', '''Execute the categorical encoding plan on 'train_cleaned.csv'. Acceptance criteria: A new 'train_encoded.csv' file where all categorical variables are encoded into numerical formats, and no original categorical variables remain. Rejection criteria: The presence of unencoded categorical variables or inappropriate application of encoding methods.
+
+Evidence: There is a categorical_encoding.py and a train_encoded.csv file.
+
+Counter evidence: 
+
+Reasoning: Because there's a categorical_encoding.py and a train_encoded.csv file, we have successfully completed the task
+
+Critique:''', '''Read 'skill_library\pythonregressionmodeltrainingandmaeeval.txt' and create a plan to train a regression model using 'train_encoded.csv'. Acceptance criteria: A detailed plan for selecting, training, and evaluating a regression model using the preprocessed data. Rejection criteria: A plan that lacks detail on the model selection, training process, or evaluation metrics.
+
+Evidence: There is a regression_model_training_plan.txt file.
+
+Counter evidence: 
+
+Reasoning: Because there's a regression_model_training_plan.txt file, we have successfully completed the task
+
+Critique:''', '''Execute the regression model training plan using 'train_encoded.csv'. Acceptance criteria: A trained regression model with an evaluation report showing MAE on a validation set. Rejection criteria: The absence of a trained model or an evaluation report, or if the MAE on the validation set is not reported.
+
+Evidence: There is a regression_model_training.py file.
+
+Counter evidence: 
+
+Reasoning: Because there's a regression_model_training.py file and the MAE was successfully calculated to be 17700.351130136984, we have successfully completed the task
+
+Critique:''', '''Analyze the feature importance from the trained RandomForestRegressor model. Acceptance criteria: A list of features ranked by their importance in predicting the SalePrice. Rejection criteria: Failure to produce a ranked list of features or using an incorrect method to assess feature importance.
+
+Evidence: There is a analyze_feature_importance.py file that successfully ran.
+
+Counter evidence: 
+
+Reasoning: Because there's a analyze_feature_importance.py file and the file successfully ran and outputted a list ranked by their importance, we have successfully completed the task
+
+Critique:''', '''Perform feature engineering based on the feature importance results. Acceptance criteria: Creation of new features or transformation of existing ones that are expected to have a significant impact on the model's predictive power. Rejection criteria: No new features created or transformations applied, or the changes are unlikely to affect the model's performance.
+
+Evidence: There is a feature_engineering.py file that successfully ran and a train_engineered.csv file that was created.
+
+Counter evidence: 
+
+Reasoning: Because there's a feature_engineering.py file that successfully ran and a train_engineered.csv file that was created, we have successfully completed the task.
+
+Critique:''', '''Read 'skill_library\regressionmodel_hyperparametertuningplan.txt' and create a plan for hyperparameter tuning of the regression model using 'train_engineered.csv'. Acceptance criteria: A detailed plan for hyperparameter tuning, including the choice of hyperparameters to tune and the method for tuning (e.g., grid search, random search). Rejection criteria: A plan that lacks detail on the hyperparameters to be tuned or the tuning method.
+
+Evidence: There is a hyperparameter_tuning_plan.txt file that was created.
+
+Counter evidence: 
+
+Reasoning: Because there's a hyperparameter_tuning_plan.txt file that was created, we have successfully completed the task.
+
+Critique:''', '''Execute the hyperparameter tuning plan using 'train_engineered.csv'. Acceptance criteria: A new model trained with optimized hyperparameters and an evaluation report showing an improved MAE on a validation set, ideally below 11,000. Rejection criteria: The absence of a new trained model, an evaluation report, or failure to achieve an improved MAE.
+
+Evidence: There is a hyperparameter_tuning.py file that was created and executed successfully.
+
+Counter evidence: 
+
+Reasoning: Because there's a hyperparameter_tuning.py file that was created and executed successfully, we have successfully completed the task.
+
+Critique:''', '''Reflect on the current model's performance and brainstorm potential improvements in feature engineering or modeling techniques that could reduce the MAE below 11,000. Acceptance criteria: A list of potential improvements or strategies to be implemented. Rejection criteria: Lack of new ideas or strategies that do not logically suggest an improvement in model performance.
+
+Evidence: There is a improvements_list.txt file that was created.
+
+Counter evidence: 
+
+Reasoning: Because there's a improvements_list.txt file that was created, we have successfully completed the task.
+
+Critique:''', '''Implement advanced feature engineering by adding interaction terms and polynomial features. Acceptance criteria: Creation of new features in the dataset and retraining of the model to evaluate if the MAE is reduced below 11,000. Rejection criteria: No new features created or failure to observe a reduction in MAE after retraining the model.
+
+Evidence: There is a advanced_feature_engineering.py file that was created and executed successfully.
+
+Counter evidence: 
+
+Reasoning: Because there's a advanced_feature_engineering.py file that was created and executed successfully, we have successfully completed the task.
+
+Critique:''', '''Implement the strategy of refined hyperparameter tuning around the best hyperparameters found. Use a more focused grid search or Bayesian optimization methods for a more efficient search. Acceptance criteria: A new set of hyperparameters that further reduces the MAE on the validation set, ideally below 11,000. Rejection criteria: Failure to find a new set of hyperparameters or no improvement in the MAE on the validation set.
+
+Evidence: There is a refined_hyperparameter_tuning.py file that was created and executed successfully.
+
+Counter evidence: 
+
+Reasoning: Because there's a refined_hyperparameter_tuning.py file that was created and executed successfully, we have successfully completed the task.
+
+Critique:''', '''Explore alternative models such as Gradient Boosting or XGBoost to improve prediction accuracy. Acceptance criteria: A trained model using Gradient Boosting or XGBoost with an evaluation report showing an improved MAE on a validation set, ideally below 11,000. Rejection criteria: The absence of a trained model using the new algorithms, an evaluation report, or failure to achieve an improved MAE on the validation set.
+
+Evidence: There is a gradient_boosting.py and xgboost_test.py file that was created and executed successfully.
+
+Counter evidence: 
+
+Reasoning: Because there's a gradient_boosting.py and xgboost_test.py file that was created and executed successfully, we have successfully completed the task.
+
+Critique:''', '''Ensure that the preprocessing steps applied to the training data are also correctly applied to the test data. Acceptance criteria: The test data should undergo the same cleaning, encoding, and feature engineering steps as the training data, resulting in a preprocessed test dataset ready for model predictions. Rejection criteria: Differences in preprocessing steps between the training and test datasets that could lead to inaccurate predictions.
+
+Evidence: There is a preprocess_test.py and test_preprocessed.csv file that was created and executed successfully.
+
+Counter evidence: 
+
+Reasoning: Because there's a preprocess_test.py and test_preprocessed.csv file that was created and executed successfully, we have successfully completed the task.
+
+Critique:''', '''Explore ensemble methods such as stacking to combine the predictive power of Gradient Boosting and XGBoost models. Acceptance criteria: A written plan for implementing a stacking ensemble method, including which models to combine and how to stack them. Rejection criteria: Lack of a clear plan or a plan that does not specify the models to be used in the ensemble.
+
+Evidence: There is a stacking_gb_xgboost_plan.txt file that was created.
+
+Counter evidence: 
+
+Reasoning: Because there's a stacking_gb_xgboost_plan.txt file that was created, we have successfully completed the task.
+
+Critique:''', '''Analyze the distribution of errors made by the current best model to identify patterns or areas where the model is underperforming. Acceptance criteria: Identification of specific ranges or types of properties where the model's predictions are less accurate. Rejection criteria: Inability to identify any specific patterns or areas of underperformance in the model's predictions.
+
+Evidence: I used the advanced_feature_engineer.py model because that has the lowest MAE and I added code to save the model as a pkl file and executed the code. Then, I used that model for the analyze_errors.py script. I produced visualizations to analyze the error distribution and tried to idetnfiy specific patterns and their correlation to error. There's a analyze_errors_summary.txt file was created and summarizes an analysis of the errors and types of properties where the model's predictions are less accurate.
+
+Counter evidence: 
+
+Reasoning: Because there's a analyze_errors_summary.txt file that was created, we have successfully completed the task.
+
+Critique:''', '''Reflect on the error analysis conducted so far and brainstorm additional insights that could be used to further refine the feature engineering or model. Acceptance criteria: Identification of new, actionable insights that can be applied to the model. Rejection criteria: Failure to identify any new insights or actionable steps.
+
+Evidence: There is a error_analysis_reflection.txt file.
+
+Counter evidence: 
+
+Reasoning: Because there's a error_analysis_reflection.txt file that was created, we have successfully completed the task.
+
+Critique:''', '''Reflect on the error analysis insights to identify potential improvements in feature engineering or model adjustments. Acceptance criteria: A list of actionable insights based on error analysis that can be implemented in the model or feature set. Rejection criteria: General reflections without actionable insights or steps that do not directly address the error patterns identified in the analysis.
+
+Evidence: There is a error_analysis_reflection_v3.txt file.
+
+Counter evidence: 
+
+Reasoning: Because there's a error_analysis_reflection_v2.txt file that was created, we have successfully completed the task.
+
+Critique:''', '''Implement skewness correction by applying a log transformation to the target variable SalePrice in the training data. Acceptance criteria: A new version of the training dataset with the transformed SalePrice. Rejection criteria: The training dataset remains unchanged or the transformation is not a log transformation.
+
+Evidence: There is a skewness_correction.py file that executed successfully.
+
+Counter evidence: 
+
+Reasoning: Because there's a skewness_correction.py file that was created and executed successfully, we have successfully completed the task.
+
+Critique:''', '''Review the error_analysis_summary.txt for additional insights that could lead to further improvements in the model. Acceptance criteria: Identification of at least one actionable insight that could potentially reduce the MAE. Rejection criteria: No new actionable insights found.
+
+Evidence: There is a analyze_errors_v3.py file that was created.
+
+Counter evidence: 
+
+Reasoning: Because there's a analyze_errors_v3 file that was created, we have successfully completed the task.
+
+Critique:''','''
+Review the 'targeted_feature_engineering.py' script and the 'error_analysis_reflection.txt' to identify any additional insights or overlooked aspects that could be used to further improve the model. Acceptance criteria: Identification of at least one actionable insight that could potentially reduce the MAE. Rejection criteria: No new actionable insights identified.
+
+Evidence: There is a error_analysis_targeted_feature_review.txt file that was created.
+
+Counter evidence: 
+
+Reasoning: Because there's a error_analysis_targeted_feature_review.txt file that was created, we have successfully completed the task.
+
+Critique:''','''
+Implement granular segmentation of high-value properties in the dataset. Acceptance criteria: A new dataset with properties segmented into finer categories such as top 2-3%, 4-5%, 6-10%. Rejection criteria: The dataset remains unsegmented or the segmentation does not reflect the proposed finer categories.
+
+Evidence: There is a granular_segmentation.py file that was created and executed.
+
+Counter evidence: 
+
+Reasoning: Because granular_segmentation.py file that was created and executed, we have successfully completed the task.
+
+Critique:''', '''Review the 'error_analysis_summary.txt' and 'analyze_feature_importance.py' outputs to identify any overlooked features or patterns that could be leveraged to improve the model. Acceptance criteria: Identification of at least one new actionable insight. Rejection criteria: No new actionable insights identified.
+
+Evidence: There is a review_overlooked_features.txt file that was created.
+
+Counter evidence: 
+
+Reasoning: Because review_overlooked_features.txt file that was created, we have successfully completed the task.
+
+Critique:
+''', '''Integrate the granular segmentation into the model by modifying the 'advanced_feature_engineering.py' script. Acceptance criteria: A modified script that includes the granular segmentation and a retrained model with potentially improved MAE. Rejection criteria: The script remains unchanged or the model's MAE does not improve.
+
+Evidence: There is a advanced_feature_engineering_granular_segmentation.py and outlier_detection_enhanced.py file that was created and executed successfully and both contain granular segmentation
+
+Counter evidence: 
+
+Reasoning: Because advanced_feature_engineering_granular_segmentation.py and outlier_detection_enhanced.py file that was created and executed successfully and both contain granular segmentation, we have successfully completed the task.
+
+Critique:
+''',
+'''
+Review the 'error_analysis_summary.txt' and 'analyze_feature_importance.py' outputs to identify any overlooked features or patterns that could be leveraged to improve the model. Acceptance criteria: Identification of at least one new actionable insight. Rejection criteria: No new actionable insights identified.
+
+Evidence: There is a overlooked_feature_review_v2.txt file that was created.
+
+Counter evidence: 
+
+Reasoning: Because a overlooked_feature_review_v2.txt file was created, we have successfully completed the task.
+
+Critique:
+''', '''
+Review the 'error_analysis_summary.txt' and 'analyze_feature_importance.py' outputs to identify potential model refinements. Acceptance criteria: Identification of at least one new actionable insight that could potentially reduce the MAE. Rejection criteria: No new actionable insights identified.
+
+Evidence: There is a potential_refinements.txt.
+
+Counter evidence: potential_refinements.txt suggests skewness correction, adjustments to all 3 top qualities, error residual features, outlier adjustment, segmented model optimization which we have already tried.
+
+Reasoning: Because are still suggestions in there that we haven't tried like complex models, cross-validation, temporal market trend features.
+
+Critique:
+''']

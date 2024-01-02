@@ -1,0 +1,23 @@
+Theory: 1. Need to convert creative inspiration of GPT into something you understand technically — what was exploited and why did it work?
+    1. And then keep on working on something in specific to boost your game
+    2. The whole point is that understanding these principles 
+    3. Creativity — a foundation that you try to leap from to go 1-2 steps further. Then people just hope for that divine insight again.
+    4. WHAT FUNSEARCH IS MISSING: THE LACK OF BUILDING UPON THE FOUNDATION. It’s just “divine insights”, and no building of knowledge. Every level should be constructed of technical info and principles that explain that information and condense it into chunks. You need to find that connection (by studying what happened -- need to be able to recognize it and articulate it), then you need to figure out the technical components of the creation. What makes the magic tick and work? Do some Q&A work to try to figure out why. Then you learn that you have an exploit when XYZ phenomena is there and you can use this skill! And then figure out how you can take advantage of that learning that you just found with variations.
+
+System Design
+1. Programs database
+2. Sampler
+3. Evaluator
+
+Flow:
+Naive random
+
+For each round:
+1. Retrieve random list of samples and their result from funsearch/
+2. Ask LLM to generate a new version
+3. Evaluate and add back to random list to improve.
+
+Actual flow
+1. Actually implement the programs database for more genetic algorithms
+2. Ask LLM to generate a new version
+3. Evaluate and add back to random list to improve.

@@ -21,7 +21,7 @@ The actual Child Class must implement all the abstract methods (init(), run())
 
 import time
 import json
-from MLAgentBench_v2.LLM import complete_text_openai
+# from MLAgentBench_v2.LLM import complete_text_openai
 
 # Updated base class that agents can take and fill in and iterate on
 class Agent:
@@ -33,23 +33,60 @@ class Agent:
         # States
         self.answer_states = env.answer_states
         self.max_states = env.max_states
+        self.update_answer_state = env.update_answer_state
+
+        self.files_action_result_history = env.files_action_result_history
+        self.max_history = env.max_history
+        self.completed_tasks = [] # for curriculum agent
+        self.failed_tasks = [] # for curriculum agent
 
         # Actions
         self.tool_descriptions = env.tool_descriptions
         self.available_actions = env.available_actions
         self.client = env.client
         self.model = env.model
+        self.complete_text_openai = env.complete_text_openai
+        self.run_assistant = env.run_assistant
+        self.search_wikipedia = env.search_wikipedia
 
         self.work_dir = env.work_dir
         self.files = env.files
+        self.files_no_skill_lib = env.files_no_skill_lib # temporary to not give the curriculum agent the skill library
 
         # Logging
         # self.log_dir = env.log_dir
         self.main_log_path = env.main_log_path
+        self.log = env.log
+        self.num_tasks = env.num_tasks
         # self.num_steps = env.num_steps
+
+        # Misc
+        # Formatting answer states for rapid experimentation and clearer prompts
+        self.formatted_answer_states = env.formatted_answer_states
+        self.formatted_action_history = env.formatted_action_history
+
+        # Read tool description for only read action. Maybe put it in env?
+        self.read_tool_description = [{
+            "type": "function",
+            "function": {
+                "name": "readFile",
+                "description": "Use this to read an existing file.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_name": {
+                            "type": "string",
+                            "description": "A valid file name with relative path to current directory if needed"
+                        }
+                    },
+                    "required": ["file_name"]
+                }
+            }
+        }]
 
     def run(self):
         pass
+    
 
 # Function calling allows for greater control than Assistants API
 class SimpleFunctionCallingAgent(Agent):
@@ -77,7 +114,7 @@ class SimpleFunctionCallingAgent(Agent):
 
             Research Problem: {self.research_problem}
             Current Files: {self.files}
-            Tools / functions: {self.available_actions.keys()}
+            Tools / functions: {list(self.available_actions.keys())}
             Most recent files, action, result, and answer states (oldest to newest):
             {formatted_answer_states}        
             """
@@ -89,7 +126,7 @@ class SimpleFunctionCallingAgent(Agent):
                 log_file.write("\n")
 
             # FUNCTION CALLING AGENT: Call the function calling API by giving tools and available functions
-            completion = complete_text_openai(self.initial_prompt, system_prompt=self.system_prompt, model=self.model, tools=self.tool_descriptions, available_functions=self.available_actions)
+            completion = self.complete_text_openai(system_prompt=self.system_prompt, user_prompt=self.initial_prompt, model=self.model, tools=self.tool_descriptions, available_functions=self.available_actions)
 
             # Log completion
             with open(self.main_log_path, "a", 1) as log_file:
@@ -137,89 +174,12 @@ class SimpleAssistantAgent(Agent):
 
             Research Problem: {self.research_problem}
             Current Files: {self.files}
-            Tools / functions: {self.available_actions.keys()}
+            Tools / functions: {list(self.available_actions.keys())}
             Most recent files, action, result, and answer states (oldest to newest):
             {formatted_answer_states}        
             """
 
-            # Invoke the Assistants API to answer
-            with open(self.main_log_path, "a", 1) as log_file:
-                log_file.write(f"\nCalling Assistants API with initial prompt: ")
-                log_file.write(json.dumps(self.initial_prompt, indent=4))
-                log_file.write("\n")
-            self.client.beta.threads.messages.create(
-                thread_id=self.thread.id,
-                role="user",
-                content=self.initial_prompt
-            )
-            run = self.client.beta.threads.runs.create(
-                thread_id=self.thread.id,
-                assistant_id=self.assistant.id,
-            )
-
-            # Wait until the run has looped
-            run_complete = False
-            num_tries = 100
-            while not run_complete:
-                # Check if there's an update on the run
-                run = self.client.beta.threads.runs.retrieve(
-                    thread_id=self.thread.id,
-                    run_id=run.id
-                )
-                run_complete = run.status == "completed"
-                print("\nrun.status: ", run.status)
-
-                # Call the tools if the run status is requires action
-                if run.status == "requires_action":
-                    tool_outputs = []
-                    for tool_call in run.required_action.submit_tool_outputs.tool_calls:
-                        tool_id, tool_function, tool_type = tool_call.id, tool_call.function, tool_call.type
-                        print(f"Run required action: \ntool_id: {tool_id}, \ntool_function.arguments: {tool_function.arguments}, \ntool_function.name: {tool_function.name}, \ntool_type: {tool_type}")
-
-                        # Call the function directly if `tool_function` is a callable object
-                        # and `arguments` is a dictionary of arguments to pass to the function.
-                        try:
-                            tool_function.arguments = tool_function.arguments.replace('\n', '\\n') # To support multi-lines in JSON.loads
-                            arguments = json.loads(tool_function.arguments)
-                            print("Arguments was JSON parsed successfully")
-                            function_output = self.available_actions[tool_function.name](**arguments)
-                        except Exception as e:
-                            function_output = f"Tool function {tool_function.name} for tool_id {tool_id} does not exist and is not callable with arguments {tool_function.arguments}. Make sure you are using only tools listed here: {self.available_actions.keys()} with the right arguments."
-
-                        print("Function output: ", function_output)
-                        tool_outputs.append({
-                            "tool_call_id": tool_id,
-                            "output": function_output
-                        })
-
-                    # Submit tool outputs as a new run
-                    run = self.client.beta.threads.runs.submit_tool_outputs(
-                        thread_id=self.thread.id,
-                        run_id=run.id,
-                        tool_outputs=tool_outputs
-                    )
-                elif run.status == "failed":
-                    print("Run failed: ", run)
-                    # Retry run if failed
-                    run = self.client.beta.threads.runs.create(
-                        thread_id=self.thread.id,
-                        assistant_id=self.assistant.id,
-                    )
-
-                time.sleep(1)
-                num_tries -= 1
-                if num_tries == 0:
-                    print("Run timed out, cancelling...")
-                    run = self.client.beta.threads.runs.cancel(thread_id=self.thread.id, run_id=run.id)
-                    while run.status != "cancelled":
-                        run = self.client.beta.threads.runs.retrieve(
-                            thread_id=self.thread.id,
-                            run_id=run.id
-                        )
-                    print("Run cancelled!")
-                    break
-            messages = self.client.beta.threads.messages.list(thread_id=self.thread.id)
-            completion = messages.data[0].content[0].text.value
+            completion = self.run_assistant(system_prompt=self.system_prompt, user_prompt=self.initial_prompt)
 
             with open(self.main_log_path, "a", 1) as log_file:
                 log_file.write(f"\nCalling Assistants API Completion: ")

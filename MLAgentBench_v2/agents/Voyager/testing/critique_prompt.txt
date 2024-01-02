@@ -1,0 +1,3 @@
+Why did this approach fail? Think step by step.
+
+Then, write a few sentences of a critique explaining why it failed and potentially how you could do better. Include only the most important information.

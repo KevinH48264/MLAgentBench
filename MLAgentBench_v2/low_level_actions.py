@@ -11,7 +11,7 @@ from functools import wraps
 import time
 from io import StringIO
 from .schema import Step, ActionInfo, Action, EnvException
-import readline # This is needed to make sure that the input() function works properly
+# import readline # This is needed to make sure that the input() function works properly  # Not on Windows
 
 
 def normalize_args_kwargs(f, *args, **kwargs):
@@ -197,7 +197,7 @@ def execute_script(script_name, work_dir = ".", **kwargs):
             events = selector.select(timeout=1)
 
             for key, _ in events:
-                line = key.fileobj.readline()
+                # line = key.fileobj.readline() # Not on Windows
                 if key.fileobj == process.stdout:
                     print("STDOUT:", line, end =" ")
                     stdout_lines.append(line)

@@ -1,0 +1,173 @@
+Theory: 
+1) Q&A might actually allow for focus and consciousness. It helps with sorting information and focusing essentially. Gathering more true information. Then temperature = 1 allows you to sample and focus on a lot of different parts of the problem, increasing breadth. # of questions = how deep you want to do / think is meaningful.
+
+Memory storage and focus should be based on the state (if state / context changed too much, then Q&A focus should also change): Q&A should all get stored in a memory bank so in the future, it can be queried. Although there probably needs more context if the code changed?? If the code evolved, then maybe you should just get rid of all the Q&A?? It's a new picture at that point. Or you can try asking the LLM to figure out which ones are still relevant / didn't change.
+
+There's something about EV calculations that need to be done here too though. After Q&A, you need to sample a bunch of options of what you can try and figure out if you found the highest EV option for that focus area. This might be fine if you just keep the Q&A in memory? 
+
+I think I can make it more efficient than funsearch because funsearch doesn't have focus other than what was the result, what was better, it's too unconscious and brute force. 
+
+My most important problem is that how do you do systematic Q&A? Or do you not? Like what if they just miss the most important part to cover / like investigating the main key factors? Well it's unlikely probably, but there really isn't a way to make guarantees. Therefore, Q&A sampling is probably the best -- in its knowledge base, it already probably knows what the main things to look for are.
+
+2) Systematized theory too? Ask GPT to maintain theoretical knowledge and principles to help with improving this game?? It should already know theories / strategies and be able to form tactics. It can search memory and web via Q&A later for details / specifics too. Creating theory for openings / moves is important of what you should do to do better / what levers you need to calculate EV for now.
+
+Features
+- Initial_system_prompt
+    - Policy model x5
+        - Prompt to include instructions to write a best answer (Variation of system prompt can allow for reasoning too, so ask for reasoning, then code in JSON)
+        - Sample 5 different actions (variation can be to improve them too because they might not run [incorrect])
+    - MCTS
+        - Run them (variation can be CoT them for expected value / net upside OR take a answer by elimination by just taking whichever one is objectively better until you have a few that are all pretty good)
+        - Take the best expected value and save outputs, code, and WHY it worked and where it failed
+- Reward_reflection_and_feedback
+    - Policy model x5
+        - Prompt to include instructions to reward reflect and feedback
+        - Sample 5 different actions
+    - MCTS
+        - Run them (variation can be CoT them)
+        - Take the best expected value and save outputs, code, and WHY it worked and where it failed
+- Problems / questions
+    1. How do we evaluate? -- this is actually a hard part. 
+    2. I generally have to install all the packages. Should I have the LLM be able to do that?
+    3. How do I represent state best? 
+    A: I think have 2 parts (1 short term memory, and 2 best current state / answer [a way for handcrafted organization that won't be easily found from training] -- kept separately, but both added as a state)
+
+System design for MLAgentBench
+1. Env for model = workspace
+2. System
+A) Initial_system_prompt
+
+System prompt = 
+You are a machine learning engineer trying to write machine learning code to solve machine learning tasks as effectively as possible.
+
+Your goal is to write a machine learning script for the environment that will help the model achieve the highest accuracy possible on the research task described in text.
+
+For evaluation, ensure that the machine learning script outputs the validation MAE (not MAE using log values but normal values).
+
+I will give you the following information:
+Research task: ...
+Files: these are the current files and its contents that you have in your working directory to work with
+
+The output format must be only executable python code, no conversation or explanation.
+
+User prompt = 
+Research task: {copy and paste the description from Kaggle}
+Files: 
+1. Filename: ...
+Content: ...
+2. ...
+
+b) Sample 5 different actions
+Run system and user prompt in chat completions with high max_tokens (4096), temperature = 1.0, top_p = 1.0, update_files_action_result_history = False
+
+c) Run them
+Use execute_script
+
+d) Take the best expected value, save output, code, and an explanation of why it was good, and why it was bad.
+1. Use chat_completion to 1) ensure that the code outputs the validation MAE and then 2) extract the validation MAE if it exists.
+2. Sort all the results
+3. Use chat completion to add more feedback about why the code was good and why it was bad.
+
+B) Reward_reflection_and_feedback
+System prompt = 
+We trained a machine learning model using the provided machine learning script and calculated the validation MAE and provided feedback:
+<REWARD REFLECTION INCLUDING VALIDATION MAE HERE>
+
+Please carefully analyze the MAE and feedback and provide a new, improved machine learning script that can better solve the task.
+
+Your goal is to write a machine learning script for the environment that will help the model achieve the highest accuracy possible on the research task described in text.
+
+For evaluation, ensure that the machine learning script outputs the validation MAE (not MAE using log values but normal values).
+
+I will give you the following information:
+Research task: ...
+Files: these are the current files and its contents that you have in your working directory to work with
+
+Please analyze each existing component of the code as suggested by the feedback, and then write the machine learning script. 
+
+The output format should be JSON. 
+Example:
+```json
+{
+    "analysis": "<insert analysis based on feedback>",
+    "code": "<insert python executable code>"
+}
+```
+
+User prompt = 
+Research task: {copy and paste the description from Kaggle}
+Machine learning script: ...
+Files: 
+1. Filename: ...
+Content: ...
+2. ...
+
+b) Sample 5 different actions
+Run system and user prompt in chat completions with high max_tokens (4096), temperature = 1.0, top_p = 1.0, update_files_action_result_history = False
+
+c) Run them
+Use execute_script
+
+d) Take the best expected value, save output, code, and an explanation of why it was good, and why it was bad.
+1. Use chat_completion to 1) ensure that the code outputs the validation MAE and then 2) extract the validation MAE if it exists.
+2. Sort all the results
+3. Use chat completion to add more feedback about why the code was good and why it was bad.
+
+
+Research
+1. Why isn't Eureka able to improve beyond run 3 in v7?
+Theory behind Eureka: a language model has sufficient interaction term modeling, that given a clear research goal, it can optimize the code towards that research goal based on its modeling landscape of interaction terms and what directions might be most desirable.
+
+Reason 6: There's a lack of systematic thinking
+- Theory / hypothesis:
+Systematic thinking means “think step by step” — not just that, but think step by step as much as possible.
+“Always think” — were you systematic enough? How could you have been more systematic? Could you possibly have missed anything that could be better / more useful? Isn't this using the process of elimination? 
+It means starting from first principles of what you’re most certain about (input data), delineating all the possibilities / options via research / and trying to min max the expected value
+Then you see how much someone says matches with your world view, and try to think about how that could be wrong — a fear of rejection essentially
+What does this look like tactically?
+- Approach: Keeping track of everything tried and what could've been possibly missed. Essentially an answer state, but in a flow diagram (that I maintain). The evaluation must be rooted in first principles of what you're most certain about (input data), and then trying to min max the expected value (probability true * how much it could improve). Think about how it could be right and the impact of it being right, and how it could be wrong and the impact of it being wrong.
+    - Tactically, this looks like giving an experimental flow to the agent, and having the agent 1) figure out how to improve what to try / what's missing, 2) if what's missing is reasonably better than what's already been tried and why, 3) making a choice about one change to make to the code to test, 4) updated code, and 5) updated experimental flow.
+    - The experimental flow would just break down the machine pipeline into parts, and just track what's been tried, and the result. 
+    - Whenever there's an improvement in architecture somehow, then the experimental flow restarts because the state has been updated.
+Old script prompting:
+{{
+    "potential_problems": "<insert analysis of potential problems based on code and result>",
+    "potential_improvements": "<insert analysis of potential specific improvements to test>",
+    "code": "<insert complete python executable code with improvements made>"
+}}
+Ctrl+F "Raw output:" to find what the response is
+- Notes: 
+    - The systematic summary is pretty much an automated process of elimination type deal and just someone systemizing and organizing what has been done. Not that as options are listed, the expected value calculations need to be reasonably done and also might require research itself.
+    - This can be useful for the Voyager when trying to decide tasks too!
+    - Even trying to figure out WHY an attempt didn't work requries systematic thinking GAH! Is this really just ToT??
+Results with trying a MCTS / DFS approach
+- Still not getting good results – need to look deeply. Maybe I just need to run a lot. 
+- Maybe I need to add memory of findings? Currently there is no memory. – I can self write this for now
+- TODO: Need to save the questions and answers, things to try and their results, because then it helps guide questions (at least for me)
+- TODO: WHY is best k value = 40 but when it's actually set to value and tested in run_19_script_4.py, it's actually worse? That makes no sense.
+
+
+Reason 4: Model training and testing is too long!! Not enough trials! note that you actually want a better way to evaluate instead of actually training the model because actually training the model takes a long time too. Especially because sometimes models with 1000 parameters in XGBoost have already taken half an hour to train and we don't need to try that again. This does place more of an emphasis on targetted learning though like Voyager instead of head bashing like Eureka.
+- Approach: Add a note that long training times should not be executed or added, but should only be scaled up at the end, which can be included as a comment. This should also be fixed with curriculum learning?
+
+Reason 3: It doesn't know what it's already tried that didn't work, therefore it just keeps trying and repeating the same mistakes. NOT LEARNING.
+- Approach: Add memory as a part of evaluation because we don't necessarily want to execute everything. This should be fine? People generally still come up with the same ideas that have already been tried. As long as during MCTS evaluation, these things that can be tried can be easily compared against and judged if it should be executed.
+
+Reason 5: No realization of what's actually the most important features. OverCond is the most important feature but even from curriculum learning eureka style this isn't discovered. This is indeed discovered by the Voyager feature_importance.py script though. (Actually Voyager had overall quality not overall condition as a top feature. Unsure what the difference here was) 
+
+
+Solved reasons:
+Reason 2: The rules aren't clear (RMSE vs MAE) -- fixed this
+
+Reason 1: It analyzed the code and result for feedback, but it's still to general so that it just implements a little bit and doesn't beat SOTA.
+- Should there be an ability for it to keep iterating if it thinks it might be more promising than other directions?
+- It probably wasn't going to really work anyway.
+
+Reason 0: Maybe there aren't enough sub goals to be optimized towards?
+- Approach: We can implement curriculum learning? But I'm not exactly sure what the code should optimize for? Great data pre-processing? Great feature engineering? Great model selection? Great post-processing? Great overall optimization and engineering. How do we know when to move on though? I suppose the model can decide based on majority vote (a large array of reason why and why not, and then deciding on what the range is)
+- 12/11/23 Experiment: I can be the curriculum agent and test this? That’s what Eureka folks did
+    - Result: This didn't really work that well. Still got bad results. Essentially, it's not able to systematically plan and go through each steps. Taking a "close" look at the existing code and what might be wrong about it. This becomes Reason 6.
+
+
+Resources:
+- A notebook that actually has a MAE that's lower (13559, val = 13885): https://www.kaggle.com/code/abhishekaggarwal896/simple-top-1-percent-kaggle-house-competition/notebook
