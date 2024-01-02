@@ -24,6 +24,8 @@ Principles:
 - Action functions -- Code Interpreter, Read File, Write File, Search, Reflect, Final Answer
 - Log files -- log dir, supports logging of action functions
 4. Experimenting with different parameters via scripting
+5. Critic Agent -- The critic is essentially a battle to be won – the critic throws questions that suggest that the answer given might not be the best, and the proposer needs to defend it. The critic samples enough until it doesn’t have any better questions and concedes that the answer is the best approach. Cannot contradict.
+- Basically the proposer agent should have answers to these like skills to defend why the proposed action is the best, and be able to realize when it isn't the best too though.
 
 MLAgentBench/
 ├── environment.py          # Minimal environment wrapper

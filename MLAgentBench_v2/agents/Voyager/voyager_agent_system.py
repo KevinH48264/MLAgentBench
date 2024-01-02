@@ -11,7 +11,8 @@ Agent system components:
 Agent components:
 1. Memory -- RAG retrieval
 
-Add-ons:
+TODO Add-ons:
+0. Search memory during planning!! That's probably why planning sucks -- the agent doesn't know what it has already done. Think about Simulacra memory system
 1. Self-explain (https://arxiv.org/pdf/2311.05997.pdf)
 2. Self-check (https://arxiv.org/pdf/2311.05997.pdf)
 '''

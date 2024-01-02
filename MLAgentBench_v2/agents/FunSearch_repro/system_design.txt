@@ -1,0 +1,23 @@
+Goal: Pseudo-code the flow
+
+- Program Specification
+1. This should include the 1) run function for evaluation and 2) evolve function for evolving by the LLM
+
+- Fun Search
+0. It should take the program specification
+1. This should initialize the programs database, sampler, and evaluator
+
+
+- Sampler
+
+
+- Programs Database
+
+
+- Evaluator
+
+
+- Code manipulation
+
+
+- Config -- setting up the programs database configuration
