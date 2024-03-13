@@ -24,6 +24,8 @@ from traceback import format_exception
 from multiprocessing import active_children
 # import readline # to make sure input() works properly # Not on Windows
 # from dacite import from_dict # Not on Windows
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import functools
 from openai import OpenAI
 import openai
@@ -41,14 +43,14 @@ from MLAgentBench_v2.low_level_actions import list_files, read_file, write_file,
 
 class Environment:
     def __init__(self, args):
-        # Note: This function should be given to the agent to figure out how to use the environment variables.
+        # Note: main environment variables that the agent can use
         print("Initializing environment...")
         self._args = args # Might be able to be deleted, more for other potentially deletable environment functions to use like signal alarm
         print("args", args)
 
         # Set up workspace and research problem.
         with open('MLAgentBench_v2/research_problem.txt', 'r') as f:
-            self._research_problem = f.read() # self.R(s) = reward model of current state
+            self._research_problem = f.read() # self.R(s) = reward function of current state
         self._benchmark_folder_name = args.task
         self._work_dir = prepare_task(
             work_dir = args.work_dir, 
@@ -65,12 +67,12 @@ class Environment:
             "result": "None",
             "files": self.files,
             "answer_state": "None"
-        }] # State representation: s_t * self.max_states
+        }] # High level state representation at answer_state level. State representation: s_t * self.max_states
         self.files_action_result_history = [{
             "action": "None",
             "result": "None",
             "files": self.files,
-        }] 
+        }] # Low level state representation at action level. Like a memory.
         self.completed_tasks = [] # for curriculum agent
         self.failed_tasks = [] # for curriculum agent
 
@@ -117,6 +119,7 @@ class Environment:
         self.num_steps = 0
         self.num_tasks = 0
         self._start_time = time.time()
+        self.execution_runs = 0
 
         # Other variables in a partially observable Markov Decision Process
         # self.transition = None # Transition probabilities between states. Problem, how do you operate when you don't even know what s' is until you take action a from state s?
@@ -132,6 +135,7 @@ class Environment:
             self.files_action_result_history = state['files_action_result_history']
             self.num_steps = state['num_steps'] + 1 # Offset so there's no overlap
             self.num_tasks = state['num_tasks'] + 1
+            self.execution_runs = state['execution_runs'] or 0
             self._start_time = state['start_time']
 
             if 'completed_tasks' in state:
@@ -308,6 +312,7 @@ Most recent answer states (newest to oldest):
             'files_action_result_history': self.files_action_result_history,
             'num_steps': self.num_steps,
             'start_time': self._start_time,
+            'execution_runs': self.execution_runs,
             'num_tasks': self.num_tasks,
             'completed_tasks': self.completed_tasks,
             'failed_tasks': self.failed_tasks,
@@ -434,6 +439,109 @@ Most recent answer states (newest to oldest):
                     raise EnvException(f"cannot write file {file_name}: {e}")
         return wrapped_write_file(**kwargs)
 
+    # helper function for extract_scores to visualize the scores
+    def visualize_scores(self, scores, score_type):
+
+        def visualize(viz_type="both"):
+            # Assuming 'scores' is your list of dictionaries
+            id_list = [item['id'] for item in scores]
+            train_scores = [item['train_score'] for item in scores]
+            val_scores = [item['val_score'] for item in scores]
+            min_val_scores = [min(val_scores[:i+1]) for i in range(len(val_scores))]
+
+            # Now, plot id vs train_score and val_score
+            plt.figure(figsize=(10, 6))
+            
+            if viz_type == 'both':
+                train_scores = [item['train_score'] for item in scores]
+                plt.scatter(id_list, train_scores, color='gray', alpha=0.25, label='Train Score')
+                plt.scatter(id_list, val_scores, color='blue', alpha=0.25, label='Validation Score')
+                plot_path = os.path.join(self.log_dir, "scores.png")
+            elif viz_type == 'val':
+                plt.scatter(id_list, val_scores, color='blue', alpha=0.25, label='Validation Score')
+                plot_path = os.path.join(self.log_dir, "val_scores.png")
+            
+            plt.plot(id_list, min_val_scores, color='#1f77b4', label='Best Validation Score', marker='o')
+            plt.gca().xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
+
+            # Adding labels and legend
+            plt.xlabel('Execution Run')
+            plt.ylabel(f'{score_type}')
+            plt.title(f'Run vs {score_type}')
+            plt.legend()
+
+            # Save the plot
+            plt.savefig(plot_path)
+            plt.clf()
+
+        visualize('both')
+        visualize('val')
+
+    # helper function for execute_script
+    def extract_scores(self, python_code, result):
+        extract_score_args = {
+            'system_prompt': '''You are a helpful assistant. Your goal is to check if the code outputs the train and validation score, specifically not from log values, but normal values, and make sure that the code for calculating validation score is actually from a validation set. If so, then extract the train and validation score value from the result. If the code doesn't output the train and validation score or its not for normal values or the code doesn't actually calculate and print validation score from a validation set, then please write "inf" as the traing and validation score. Please also write down what type of validation score it is (ex. Mean Absolute Error (MAE), Root Mean Squared Error (RMSE), accuracy, etc.)
+            
+            Example:
+            ```json
+            {
+                "observations": "<string>",
+                "score_type": "<string>",
+                "train_score": <float>,
+                "val_score": <float>
+            }''',
+            'json_required': True,
+            'user_prompt': "Code: " + python_code + "\nResult after executing code: " + result,
+            'max_tokens': 4096,
+            'temperature': 0.0,
+            'top_p': 0.0,
+            'update_files_action_result_history': False,
+        }
+        scores_json = self.complete_text_openai(**extract_score_args)
+        
+        # try updating scores.json
+        try:
+            scores = json.loads(scores_json)
+            score_type = scores["score_type"]
+            train_score = float(scores['train_score'])
+            val_score = float(scores['val_score'])
+
+            if score_type != "N/A": # ensure correct parsing
+                scores_file_path = os.path.join(self.log_dir, "scores.json")
+
+                # Check if the file exists.
+                if not os.path.exists(scores_file_path):
+                    # If the file does not exist, create an empty list and save it to the file.
+                    with open(scores_file_path, 'w') as file:
+                        json.dump([], file)
+                    scores = []
+                else:
+                    # If the file exists, load its contents.
+                    with open(scores_file_path, 'r') as file:
+                        scores = json.load(file)
+
+                # Now, add a new entry to the scores list.
+                new_score = {
+                    'id': self.execution_runs,
+                    'train_score': train_score,
+                    'val_score': val_score
+                }
+                scores.append(new_score)
+
+                # Save the updated scores list back to the file.
+                with open(scores_file_path, 'w') as file:
+                    json.dump(scores, file, indent=4)
+
+                # Update eval.img
+                self.visualize_scores(scores, score_type)
+
+                self.execution_runs += 1
+        except:
+            score_type = "N/A"
+            train_score = 'inf'
+            val_score = 'inf'
+        return
+
     # TODO: add the "check_file_in_work_dir" function from before
     def execute_script(self, **kwargs):
         @self.log_decorator
@@ -465,6 +573,7 @@ Most recent answer states (newest to oldest):
 
                 # Sometimes there is no output, therefore, we append the code as well as the message to the output for more information
                 observation = open(os.path.join(work_dir, script_name)).read()
+
                 if len(observation) > self.MAX_PROMPT_TOKENS * 4: # Auto-truncate if too long
                     observation = observation[:self.MAX_PROMPT_TOKENS * 4] + f"... The rest was truncated because it was too long (over {self.MAX_PROMPT_TOKENS * 4} chars). Please use the information given above, or if you're reading a file, please use or write a script to read chunks of the file."
                 if process.returncode != 0:
@@ -474,9 +583,13 @@ Most recent answer states (newest to oldest):
                     return error_message
                     # + "\nExecuted file contents: \n" + observation
                 else:
-                    # Success
+                    # Successful execution
                     success_message = "Script output: " + stdout
                     self.log(success_message)
+
+                    # Evaluation
+                    self.extract_scores(python_code=observation, result=stdout)
+
                     return success_message
                     #  + "\nExecuted file contents: \n" + observation
             except Exception as e:

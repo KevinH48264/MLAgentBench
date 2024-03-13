@@ -86,9 +86,8 @@ class Agent:
 
     def run(self):
         pass
-    
 
-# Function calling allows for greater control than Assistants API
+# Baseline agent: Function calling allows for greater control than Assistants API
 class SimpleFunctionCallingAgent(Agent):
     """ Agent that uses function calling based on a prompt."""
     def __init__(self, env):
@@ -98,18 +97,16 @@ class SimpleFunctionCallingAgent(Agent):
         print("Starting to run Simple Function Calling Agent")
         self.system_prompt = '''You are a helpful and first-rate research assistant.'''
 
-        MAX_STEPS = 10
-        count = 0
-        while True:
+        MAX_STEPS = 10 # DEBUG: REMOVE WHEN YOU DON'T WANT TO HARD-CODE
+        for count in range(MAX_STEPS):
             # Create the prompt for function calling
-            assert('action' in self.answer_states[0].keys() and 'result' in self.answer_states[0].keys() and 'answer_state' in self.answer_states[0].keys() and 'files' in self.answer_states[0].keys())
+            assert('action' in self.files_action_result_history[0].keys() and 'result' in self.files_action_result_history[0].keys() and 'files' in self.files_action_result_history[0].keys())
             formatted_answer_states = ""
-            for idx, answer_state in enumerate(self.answer_states):
+            for idx, answer_state in enumerate(self.files_action_result_history):
                 formatted_answer_states += "\nStep: " + str(idx) 
                 formatted_answer_states += "\nFiles: " + str(answer_state['files']) 
                 formatted_answer_states += "\nAction: " + answer_state['action'] 
                 formatted_answer_states += "\nResult: " + answer_state['result'] 
-                formatted_answer_states += "\nAnswer: " + answer_state['answer_state'] 
             self.initial_prompt = f"""You are a helpful research assistant. Given a research problem, files, tools, and at most {self.max_states} of your most recent files, action, result, and answer, your goal is to choose and take the next best action and tool that you think could lead to a better answer and get you closer to solving the research problem. 
 
             Research Problem: {self.research_problem}
@@ -134,9 +131,6 @@ class SimpleFunctionCallingAgent(Agent):
                 log_file.write(completion)
                 log_file.write("\n")
 
-            count += 1
-            if count > MAX_STEPS:
-                break
         return "Finished successfully! Final message: " + completion
 
 class SimpleAssistantAgent(Agent):
