@@ -79,29 +79,10 @@ class Environment:
         # Set up actions
         self._tool_descriptions = TOOL_DESCRIPTIONS # Formatted for OpenAI function calling
         self._available_actions = {
-                # 'understandFile': understand_file,
-                # 'appendSummaryToResearchLog': append_to_research_log,
-                # 'inspectScriptLines': inspect_script_lines,
-                # 'editScript': edit_script,
-                # 'editScriptSegment': edit_script_lines,
                 'reflection': self.reflection,
-                # 'retrievalFromResearchLog': retrieval_from_research_log,
-                # 'listFiles': self.list_files,
                 'readFile': self.read_file,
                 'writeFile': self.write_file,
-                # 'appendFile': append_file,
-                # 'copyFile': copy_file,
-                # 'undoEditScript': undo_edit_script,
                 'executeScript': self.execute_script,
-                # 'pythonREPL': python_repl,
-                # 'requestHelp': self.request_help,
-                # 'finalAnswer': self.final_answer,
-                # 'webSearch': self.web_search,
-                # 'openaiAssistantCreateAssistant': pass,
-                # 'openaiAssistantCreateThread': pass,
-                # 'openaiAssistantCreateThreadMessage': pass,
-                # 'openaiAssistantCreateRun': pass,
-                # 'openaiAssistantListThreadMessageCompletion': pass,
             }
         self.request_session = requests.Session()
 
@@ -120,6 +101,9 @@ class Environment:
         self.num_tasks = 0
         self._start_time = time.time()
         self.execution_runs = 0
+        self.eval_path = self.log_dir + '/eval'
+        if not os.path.exists(self.eval_path):
+            os.makedirs(self.eval_path)
 
         # Other variables in a partially observable Markov Decision Process
         # self.transition = None # Transition probabilities between states. Problem, how do you operate when you don't even know what s' is until you take action a from state s?
@@ -135,7 +119,7 @@ class Environment:
             self.files_action_result_history = state['files_action_result_history']
             self.num_steps = state['num_steps'] + 1 # Offset so there's no overlap
             self.num_tasks = state['num_tasks'] + 1
-            self.execution_runs = state['execution_runs'] or 0
+            self.execution_runs = state['execution_runs'] if 'execution_runs' in state else 0
             self._start_time = state['start_time']
 
             if 'completed_tasks' in state:
@@ -449,33 +433,44 @@ Most recent answer states (newest to oldest):
             val_scores = [item['val_score'] for item in scores]
             min_val_scores = [min(val_scores[:i+1]) for i in range(len(val_scores))]
 
-            # Now, plot id vs train_score and val_score
+            # to measure number of calls before each successful execution as a measure of efficiency
+            num_calls = [scores[0]['step_id']]
+            for i in range(1, len(scores)):
+                num_calls.append(scores[i]['step_id'] - scores[i-1]['step_id'])
+
+            # Now, plot id vs train_score and val_score and num_calls
+            y_label = score_type
             plt.figure(figsize=(10, 6))
-            
             if viz_type == 'both':
                 train_scores = [item['train_score'] for item in scores]
                 plt.scatter(id_list, train_scores, color='gray', alpha=0.25, label='Train Score')
                 plt.scatter(id_list, val_scores, color='blue', alpha=0.25, label='Validation Score')
-                plot_path = os.path.join(self.log_dir, "scores.png")
+                plt.plot(id_list, min_val_scores, color='#1f77b4', label='Best Validation Score', marker='o')
+                plot_path = os.path.join(self.eval_path, "scores.png")
             elif viz_type == 'val':
                 plt.scatter(id_list, val_scores, color='blue', alpha=0.25, label='Validation Score')
-                plot_path = os.path.join(self.log_dir, "val_scores.png")
-            
-            plt.plot(id_list, min_val_scores, color='#1f77b4', label='Best Validation Score', marker='o')
+                plt.plot(id_list, min_val_scores, color='#1f77b4', label='Best Validation Score', marker='o')
+                plot_path = os.path.join(self.eval_path, "val_scores.png")
+            elif viz_type == 'num_steps':
+                y_label = '# of Steps Before Executing Script'
+                plt.scatter(id_list, num_calls, color='green', alpha=0.5, label='# of Steps')
+                plot_path = os.path.join(self.eval_path, "num_steps.png")
+                plt.gca().yaxis.set_major_locator(ticker.MaxNLocator(integer=True))
             plt.gca().xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
 
             # Adding labels and legend
             plt.xlabel('Execution Run')
-            plt.ylabel(f'{score_type}')
-            plt.title(f'Run vs {score_type}')
+            plt.ylabel(f'{y_label}')
+            plt.title(f'Run vs {y_label}')
             plt.legend()
 
             # Save the plot
             plt.savefig(plot_path)
             plt.clf()
 
-        visualize('both')
-        visualize('val')
+        visualize('both') # train and val scores in log/<log>/scores.png
+        visualize('val') # val scores in log/<log>/val_scores.png
+        visualize('num_steps') # number of steps in log/<log>/num_steps.png
 
     # helper function for execute_script
     def extract_scores(self, python_code, result):
@@ -507,7 +502,7 @@ Most recent answer states (newest to oldest):
             val_score = float(scores['val_score'])
 
             if score_type != "N/A": # ensure correct parsing
-                scores_file_path = os.path.join(self.log_dir, "scores.json")
+                scores_file_path = os.path.join(self.eval_path, "scores.json")
 
                 # Check if the file exists.
                 if not os.path.exists(scores_file_path):
@@ -523,10 +518,12 @@ Most recent answer states (newest to oldest):
                 # Now, add a new entry to the scores list.
                 new_score = {
                     'id': self.execution_runs,
+                    'step_id': self.num_steps,
                     'train_score': train_score,
                     'val_score': val_score
                 }
                 scores.append(new_score)
+                self.execution_runs += 1
 
                 # Save the updated scores list back to the file.
                 with open(scores_file_path, 'w') as file:
@@ -535,7 +532,6 @@ Most recent answer states (newest to oldest):
                 # Update eval.img
                 self.visualize_scores(scores, score_type)
 
-                self.execution_runs += 1
         except:
             score_type = "N/A"
             train_score = 'inf'

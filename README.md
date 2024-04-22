@@ -58,6 +58,14 @@ first_test/
 
 If llm names are not specified in the args, we use claude-v1 model by default for all LLM calls. See example logs with GPT-4 over cifar10 [here](https://drive.google.com/drive/folders/1Ozy_zKYdvwcSq3EFnkaudgUXKJmBwQ5t?usp=drive_link).
 
+## MLAgentBench_v2
+MLAgentBench formulates all variables should be part of the environment and that the agent learns to adapt to the environemtn
+
+To run:
+1. Make sure you created a class and imported it into runner.py (if you’re not using SimpleFunctionCallingAgent below)
+2. Run "python -u -m MLAgentBench_v2.runner --python $(which python) --task home-data-for-ml-course --device 0 --log-dir 2024-04-20__house-price-testing__gpt35__simple-function-calling-agent__v1 --work-dir workspace --llm-name gpt-3.5-turbo-1106 --edit-script-llm-name gpt-3.5-turbo-1106 --fast-llm-name gpt-3.5-turbo-1106 --agent-type SimpleFunctionCallingAgent"
+
+
 # Evaluation
 
 To run evaluation:

@@ -97,7 +97,7 @@ class SimpleFunctionCallingAgent(Agent):
         print("Starting to run Simple Function Calling Agent")
         self.system_prompt = '''You are a helpful and first-rate research assistant.'''
 
-        MAX_STEPS = 10 # DEBUG: REMOVE WHEN YOU DON'T WANT TO HARD-CODE
+        MAX_STEPS = 1 # DEBUG: REMOVE WHEN YOU DON'T WANT TO HARD-CODE
         for count in range(MAX_STEPS):
             # Create the prompt for function calling
             assert('action' in self.files_action_result_history[0].keys() and 'result' in self.files_action_result_history[0].keys() and 'files' in self.files_action_result_history[0].keys())

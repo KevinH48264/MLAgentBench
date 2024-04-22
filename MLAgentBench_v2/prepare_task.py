@@ -50,7 +50,7 @@ def prepare_task(work_dir, task_name, task_type, python="python"):
         if not os.path.exists(work_dir):
             # Create an empty workspace directory if none exists for the custom task
             os.makedirs(work_dir)
-            os.makedirs(work_dir + "/skill_library") # Make a skill library in the global original directory
+            # os.makedirs(work_dir + "/skill_library") # Make a skill library in the global original directory
             if task_type == "kaggle":
                 prepare_kaggle(work_dir, task_name)
 
@@ -60,7 +60,7 @@ def prepare_task(work_dir, task_name, task_type, python="python"):
         # Set the updated workspace directory to called the branch and overwrite if necessary
         new_dir = f"{work_dir}_branch"
         if os.path.exists(new_dir):
-            shutil.rmtree(new_dir)
+            shutil.rmtree(new_dir) # Start from scratch if it already exists, or clean out to be replaced by an existing log file
         shutil.copytree(work_dir, new_dir)
 
         # Delete answer.csv for Kaggle if evaluating
