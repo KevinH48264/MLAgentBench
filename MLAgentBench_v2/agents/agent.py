@@ -22,6 +22,7 @@ The actual Child Class must implement all the abstract methods (init(), run())
 import time
 import json
 # from MLAgentBench_v2.LLM import complete_text_openai
+from MLAgentBench_v2.LLM import query
 
 # Updated base class that agents can take and fill in and iterate on
 class Agent:
@@ -48,13 +49,14 @@ class Agent:
         self.complete_text_openai = env.complete_text_openai
         self.run_assistant = env.run_assistant
         self.search_wikipedia = env.search_wikipedia
+        self.query = query # DEBUG: Hardcode for now for testing! Action should be moved to agent or environment
 
         self.work_dir = env.work_dir
         self.files = env.files
         self.files_no_skill_lib = env.files_no_skill_lib # temporary to not give the curriculum agent the skill library
 
         # Logging
-        # self.log_dir = env.log_dir
+        self.log_dir = env.log_dir
         self.main_log_path = env.main_log_path
         self.log = env.log
         self.num_tasks = env.num_tasks

@@ -43,7 +43,7 @@ try:
     import openai
     from openai import OpenAI
     # setup OpenAI API key
-    openai.organization, openai.api_key  =  open("openai_api_key.txt").read().strip().split(":")
+    openai.api_key = os.getenv('OPENAI_API_KEY')
     openai_client = OpenAI(api_key=openai.api_key)
 except Exception as e:
     print(e)
@@ -138,6 +138,31 @@ def complete_text_crfm(prompt=None, stop_sequences = None, model="openai/gpt-4-0
     if log_file is not None:
         log_to_file(log_file, prompt, completion, model, max_tokens_to_sample)
     return completion
+
+
+def history_to_messages(history: list[dict[str, str]]) -> list[dict[str, str]]:
+    '''Create `messages` by filtering out all keys except for role/content per `history` turn'''
+    return [
+        {k: v for k, v in entry.items() if k in ["role", "content"]}
+        for entry in history
+    ]
+
+
+def query(history: list[dict[str, str]], model="gpt-3.5-turbo-1106", temperature=0.2) -> str:
+    """
+    Query the OpenAI API with the given `history` and return the response.
+    """
+    try:
+        # Perform OpenAI API call
+        response = openai_client.chat.completions.create(
+            messages=history_to_messages(history),
+            model=model,
+            temperature=temperature,
+        )
+    except Exception as e:
+        print(f"Exception in LLM.py query: {e}")
+    return response.choices[0].message.content
+
 
 # TODO: clean this function code up!
 def complete_text_openai(prompt, system_prompt="You are a helpful assistant.", stop_sequences=[], model="gpt-3.5-turbo-1106", max_tokens_to_sample=2000, temperature=0.2, log_file=None, json_required=False, tools=None, available_functions=None, **kwargs):

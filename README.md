@@ -62,8 +62,11 @@ If llm names are not specified in the args, we use claude-v1 model by default fo
 MLAgentBench formulates all variables should be part of the environment and that the agent learns to adapt to the environemtn
 
 To run:
-1. Make sure you created a class and imported it into runner.py (if you’re not using SimpleFunctionCallingAgent below)
-2. Run "python -u -m MLAgentBench_v2.runner --python $(which python) --task home-data-for-ml-course --device 0 --log-dir 2024-04-20__house-price-testing__gpt35__simple-function-calling-agent__v1 --work-dir workspace --llm-name gpt-3.5-turbo-1106 --edit-script-llm-name gpt-3.5-turbo-1106 --fast-llm-name gpt-3.5-turbo-1106 --agent-type SimpleFunctionCallingAgent"
+1. Ensure that in your root folder, you have ".kaggle/kaggle.json" with your API credentials
+2. You need to be a root user, so run "docker run -it --user root -v ${PWD}:/MLAgentBench -w /MLAgentBench qhwang123/researchassistant:latest"
+3. To download dependencies for setup, run "./mlagentbench_v2_setup.sh"
+4. Make sure you created a class and imported it into runner.py (if you’re not using SimpleFunctionCallingAgent below)
+5. Run "python -u -m MLAgentBench_v2.runner --python $(which python) --task home-data-for-ml-course --device 0 --log-dir 2024-04-20__house-price-testing__gpt35__simple-function-calling-agent__v1 --work-dir workspace --llm-name gpt-3.5-turbo-1106 --edit-script-llm-name gpt-3.5-turbo-1106 --fast-llm-name gpt-3.5-turbo-1106 --agent-type SimpleFunctionCallingAgent"
 
 
 # Evaluation
@@ -106,3 +109,9 @@ submission at the last step:
 
 You can also specify tasks interactively to the research agent by running `research_agent_interactive.sh`, or ideally as a vscode extension.
 
+# Appendix (ask Kevin for permission to these documents)
+- On how to run MLAgentBench_V2, instructions can be found in [here](https://docs.google.com/document/d/1GPFU28RjBMVqTvXvq92LnHHYn7jBzvujD5LYg3iF3mc/edit#heading=h.z9yvukrwxnb7)
+
+- Don't understand the code base? Follow the [System Design doc](https://docs.google.com/drawings/d/1dVUhD738yRyKSg8dVf0_AIys7EmdjhBD8WcRchiVBKA/edit)
+
+- How to access Preview Mode for .md files? Use CTRL+SHIFT+V for Preview Mode

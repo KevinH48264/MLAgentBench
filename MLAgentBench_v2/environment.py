@@ -33,24 +33,20 @@ from dotenv import load_dotenv
 from .LLM import complete_text_fast, complete_text
 load_dotenv()
 
-import MLAgentBench_v2.high_level_actions as high_level_actions
 from .schema import Step, Trace, EnvException, TooLongPromptError, LLMError, EnhancedJSONEncoder 
 from .LLM import complete_text_claude
 from .prepare_task import prepare_task
 from MLAgentBench_v2.actions import TOOL_DESCRIPTIONS
-from MLAgentBench_v2.high_level_actions import understand_file, append_to_research_log, inspect_script_lines, edit_script, edit_script_lines, reflection, retrieval_from_research_log
-from MLAgentBench_v2.low_level_actions import list_files, read_file, write_file, append_file, copy_file, undo_edit_script, execute_script, python_repl, request_help
 
 class Environment:
     def __init__(self, args):
         # Note: main environment variables that the agent can use
-        print("Initializing environment...")
+        print("--- Initializing environment ---")
         self._args = args # Might be able to be deleted, more for other potentially deletable environment functions to use like signal alarm
-        print("args", args)
+        print("--- Environment args ---\n", args)
 
         # Set up workspace and research problem.
-        with open('MLAgentBench_v2/research_problem.txt', 'r') as f:
-            self._research_problem = f.read() # self.R(s) = reward function of current state
+        self._research_problem = args.research_problem # self.R(s) = reward function of current state
         self._benchmark_folder_name = args.task
         self._work_dir = prepare_task(
             work_dir = args.work_dir, 
